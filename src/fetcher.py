@@ -1,5 +1,5 @@
 """
-HTTP 请求层 - 独立封装网络请求逻辑
+HTTP 请求层与 B站历史记录获取器
 """
 import random
 import threading
@@ -14,9 +14,12 @@ from config import get_config
 from exceptions import APIError, CookieError, NetworkError, RetryExhaustedError
 from logger import logger
 
+# 慢请求告警阈值（秒）
+SLOW_REQUEST_THRESHOLD = 3.0
+
 
 class HTTPClient:
-    """HTTP 客户端"""
+    """HTTP 客户端（带请求/响应日志、慢请求告警）"""
 
     def __init__(self):
         self.config = get_config()
@@ -48,17 +51,20 @@ class HTTPClient:
         }
 
     def get(self, url: str, **kwargs) -> requests.Response:
-        """发送 GET 请求"""
+        """发送 GET 请求并记录耗时与状态"""
         headers = self._get_headers()
         headers.update(kwargs.pop('headers', {}))
 
+        start = time.time()
         try:
             response = self.session.get(url, headers=headers, timeout=10, **kwargs)
+            elapsed = time.time() - start
+            self._log_response("GET", url, response, elapsed)
             response.raise_for_status()
             return response
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code
-            if status_code == 401 or status_code == 403:
+            if status_code in (401, 403):
                 raise CookieError("Cookie无效或已过期，请更新 Cookie")
             raise APIError(str(e), status_code=status_code)
         except requests.exceptions.ConnectionError as e:
@@ -67,6 +73,21 @@ class HTTPClient:
             raise NetworkError(f"请求超时: {e}")
         except Exception as e:
             raise NetworkError(f"请求异常: {e}")
+
+    def _log_response(self, method: str, url: str, response: requests.Response, elapsed: float):
+        """记录请求摘要；耗时超过阈值发出告警"""
+        msg = f"[{method}] {url} -> {response.status_code} ({elapsed:.2f}s)"
+        if elapsed >= SLOW_REQUEST_THRESHOLD:
+            logger.warning(f"{msg} [慢请求]")
+        else:
+            logger.info(msg)
+
+        # 记录响应体摘要（仅前 500 字符，避免日志过大）
+        try:
+            preview = response.text[:500].replace("\n", " ")
+            logger.debug(f"响应预览: {preview}")
+        except Exception:
+            pass
 
     def close(self):
         """关闭会话"""
@@ -83,18 +104,21 @@ class BilibiliFetcher:
         self.retry_wait = self.config.retry_wait
         self._cancel_event = cancel_event
 
+    def _is_cancelled(self) -> bool:
+        """统一取消检查"""
+        if self._cancel_event and self._cancel_event.is_set():
+            logger.info("用户取消抓取")
+            return True
+        return False
+
+    def _raise_if_cancelled(self):
+        """取消时直接抛出中断异常"""
+        if self._is_cancelled():
+            raise InterruptedError("用户取消抓取")
+
     def fetch_page(self, max_oid: int = 0, view_at: int = 0, business: str = "") -> Optional[dict]:
-        """获取单页历史记录（游标分页）
-
-        Args:
-            max_oid: 游标起始目标 ID（上一页 cursor.max），首页传 0
-            view_at: 游标起始时间戳（上一页 cursor.view_at），首页传 0
-            business: 游标业务类型（上一页 cursor.business），首页传空
-
-        Returns:
-            data 字段字典（含 cursor 和 list），失败返回 None
-        """
-        page_size = min(self.config.page_size, 30)  # 接口单页上限 30
+        """获取单页历史记录（游标分页）"""
+        page_size = min(self.config.page_size, 30)
         url = (f"{self.config.history_api}"
                f"?max={max_oid}&view_at={view_at}&business={business}&ps={page_size}")
 
@@ -137,10 +161,10 @@ class BilibiliFetcher:
         page = 1
 
         while True:
-            data = self.fetch_page(max_oid, view_at, business)
+            self._raise_if_cancelled()
 
+            data = self.fetch_page(max_oid, view_at, business)
             if data is None:
-                # API 逻辑错误（非网络问题），游标无法推进，只能终止
                 logger.error("接口返回异常，停止获取")
                 break
 
@@ -158,7 +182,6 @@ class BilibiliFetcher:
                 logger.info("调试模式：仅获取第一页")
                 break
 
-            # 推进游标
             cursor = data.get("cursor") or {}
             max_oid = cursor.get("max", 0)
             view_at = cursor.get("view_at", 0)
@@ -169,13 +192,8 @@ class BilibiliFetcher:
                 break
 
             page += 1
-            if self._cancel_event and self._cancel_event.is_set():
-                logger.info("用户取消抓取")
-                break
+            self._raise_if_cancelled()
             time.sleep(1.5 + random.uniform(0, 1.5))
-            if self._cancel_event and self._cancel_event.is_set():
-                logger.info("用户取消抓取")
-                break
 
         return all_records
 

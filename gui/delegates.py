@@ -6,14 +6,23 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
 from gui import theme
-from gui.table_model import TypeRole, ProgressRole, ProgressTextRole, NewRole
+from gui.table_model import TypeRole, ProgressRole, ProgressTextRole, NewRole, HoverRole
 
 
 def _paint_row_bg(painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex):
     """统一绘制行背景（hover 粉底 / 新增行淡绿底 / 底部分隔线）"""
     rect = option.rect
     bg = index.data(Qt.ItemDataRole.BackgroundRole)
-    if option.state & (QStyle.StateFlag.State_Selected | QStyle.StateFlag.State_MouseOver):
+    selected = bool(option.state & QStyle.StateFlag.State_Selected)
+    hover_progress = index.data(HoverRole) or 0.0
+    mouse_over = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+    if selected:
+        painter.fillRect(rect, QColor(theme.PINK_LIGHT))
+    elif hover_progress > 0 and isinstance(bg, QColor):
+        # 使用 model 已经做过颜色过渡计算的 hover 背景
+        painter.fillRect(rect, bg)
+    elif mouse_over:
         painter.fillRect(rect, QColor(theme.PINK_LIGHT))
     elif isinstance(bg, QColor):
         painter.fillRect(rect, bg)

@@ -17,12 +17,12 @@ VSVersionInfo(
         StringTable(
           u'080404b0',
           [StringStruct(u'CompanyName', u'BiliHistory'),
-           StringStruct(u'FileDescription', u'B站历史记录管理工具'),
+           StringStruct(u'FileDescription', u'BiliHistory - B站历史记录管理工具'),
            StringStruct(u'FileVersion', u'1.0.0'),
            StringStruct(u'InternalName', u'BiliHistory'),
            StringStruct(u'LegalCopyright', u'Copyright (C) 2026'),
            StringStruct(u'OriginalFilename', u'BiliHistory.exe'),
-           StringStruct(u'ProductName', u'B站历史记录管理工具'),
+           StringStruct(u'ProductName', u'BiliHistory - B站历史记录管理工具'),
            StringStruct(u'ProductVersion', u'1.0.0')])
       ]),
     VarFileInfo([VarStruct(u'Translation', [2052, 1200])])

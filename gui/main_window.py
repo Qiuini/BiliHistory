@@ -40,6 +40,9 @@ from config import get_config
 from storage import HistoryStorage
 from models import ContentType
 from social_fetcher import UserInfoFetcher
+from exporter import export_records, supported_filters, EXPORT_FORMATS
+from updater import check_update
+from gui import animations
 
 from gui import theme
 from gui.table_model import HistoryTableModel, LinkRole
@@ -95,13 +98,49 @@ class _RegTimeWorker(QThread):
             self.ready.emit("")
 
 
+class _LoadStorageWorker(QThread):
+    """后台加载本地 CSV 总表，避免启动时阻塞 UI"""
+
+    ready = pyqtSignal(object)
+
+    def __init__(self, storage: HistoryStorage, parent=None):
+        super().__init__(parent)
+        self.storage = storage
+
+    def run(self):
+        try:
+            self.storage.load()
+            self.ready.emit(self.storage)
+        except Exception as e:
+            logger.warning(f"加载本地记录失败: {e}")
+            self.ready.emit(None)
+
+
+class _UpdateWorker(QThread):
+    """后台检查更新"""
+
+    ready = pyqtSignal(object)
+
+    def __init__(self, current_version: str, parent=None):
+        super().__init__(parent)
+        self.current_version = current_version
+
+    def run(self):
+        try:
+            # 使用较短超时，避免关闭应用时长时间阻塞
+            info = check_update(self.current_version, timeout=5)
+            self.ready.emit(info)
+        except Exception:
+            self.ready.emit(None)
+
+
 class MainWindow(QMainWindow):
     """B站历史记录管理主窗口"""
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("BiliHistory - B站历史记录管理工具")
-        self.resize(1000, 680)
+        self.resize(1600, 900)
         self.setMinimumSize(760, 520)
         # Win11 Fluent 风格无边框窗口（设计稿含自定义标题栏）
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
@@ -120,16 +159,25 @@ class MainWindow(QMainWindow):
         self._ids_before_fetch: set[str] = set()
         self._drag_pos: QPoint | None = None
         self._is_maximized = False
+        self._update_worker: _UpdateWorker | None = None
+        self._update_badge: QLabel | None = None
+        self._load_worker: _LoadStorageWorker | None = None
 
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.setInterval(1000)
         self._elapsed_timer.timeout.connect(self._tick_elapsed)
 
         self._spinner_timer = QTimer(self)
-        self._spinner_timer.setInterval(120)
+        self._spinner_timer.setInterval(80)  # 更短的刷新周期，让 spinner 更流畅
         self._spinner_chars = ["◐", "◓", "◑", "◒"]
         self._spinner_idx = 0
         self._spinner_timer.timeout.connect(self._tick_spinner)
+
+        # 搜索防抖：输入停止 200ms 后再刷新表格
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(200)
+        self._search_timer.timeout.connect(self._refresh_view)
 
         self._build_ui()
         self._install_log_bridge()
@@ -138,6 +186,7 @@ class MainWindow(QMainWindow):
         self._load_master()
         self._refresh_license_status()
         self._load_registration_time()
+        self._check_for_update()
 
     def _load_registration_time(self):
         """从 Cookie 中解析 DedeUserID 并后台查询注册时间"""
@@ -160,6 +209,41 @@ class MainWindow(QMainWindow):
             self.reg_time_label.setText(f"注册于 {date_str}")
         else:
             self.reg_time_label.setText("注册时间 --")
+
+    def _check_for_update(self):
+        """延迟启动后台线程检查更新，避免启动瞬间同时发起多个网络请求"""
+        try:
+            from version import APP_VERSION
+            self._update_version = APP_VERSION
+            QTimer.singleShot(2000, self._start_update_worker)
+        except Exception as e:
+            logger.warning(f"启动更新检查失败: {e}")
+
+    def _start_update_worker(self):
+        """实际启动更新检查线程"""
+        if not hasattr(self, "_update_version"):
+            return
+        self._update_worker = _UpdateWorker(self._update_version, self)
+        self._update_worker.ready.connect(self._on_update_ready)
+        self._update_worker.start()
+
+    def _on_update_ready(self, info):
+        """更新检查完成后更新 UI"""
+        self._update_worker = None
+        if not info:
+            return
+        if info.error:
+            logger.debug(f"更新检查失败: {info.error}")
+            return
+        if not info.has_update:
+            return
+
+        if self._update_badge:
+            self._update_badge.setText(f"发现新版本 {info.latest_version} ↗")
+            self._update_badge.setToolTip(f"当前版本: {info.current_version}\n点击前往 Release 页面")
+            self._update_badge.setVisible(True)
+            self._update_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._update_badge.mousePressEvent = lambda e: webbrowser.open(info.release_url)
 
     # ================= UI 骨架 =================
     def _build_ui(self):
@@ -201,6 +285,7 @@ class MainWindow(QMainWindow):
         controls = QHBoxLayout()
         controls.setSpacing(0)
         controls.setContentsMargins(0, 0, 0, 0)
+        self.btn_maximize = None
         for symbol, name, handler in [
             ("─", "Minimize", self.showMinimized),
             ("□", "Maximize", self._toggle_maximized),
@@ -213,6 +298,8 @@ class MainWindow(QMainWindow):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(handler)
             controls.addWidget(btn)
+            if name == "Maximize":
+                self.btn_maximize = btn
         lay.addLayout(controls)
         return bar
 
@@ -221,6 +308,13 @@ class MainWindow(QMainWindow):
             self.showNormal()
         else:
             self.showMaximized()
+
+    def changeEvent(self, event):
+        """最大化/还原状态变化时同步标题栏按钮图标"""
+        super().changeEvent(event)
+        if event.type() == event.Type.WindowStateChange and self.btn_maximize:
+            symbol = _ICONS["restore"] if self.isMaximized() else _ICONS["maximize"]
+            self.btn_maximize.setText(symbol)
 
     def _resize_edge_at(self, pos: QPoint) -> Qt.Edge:
         """根据鼠标位置判断当前处于窗口哪条边/角，用于无边框窗口缩放"""
@@ -268,24 +362,26 @@ class MainWindow(QMainWindow):
             if edge and self.windowHandle() and not self.isMaximized():
                 self.windowHandle().startSystemResize(edge)
                 return
-            # 仅在标题栏区域触发拖动
-            if event.position().y() <= 36:
-                self._drag_pos = event.globalPosition().toPoint()
+            # 标题栏区域使用系统原生拖动，获得 Aero Snap / 最大化动画
+            if event.position().y() <= 36 and self.windowHandle():
+                self.windowHandle().startSystemMove()
+                return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
-        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
-            if not self.isMaximized():
-                self.move(self.pos() + event.globalPosition().toPoint() - self._drag_pos)
-            self._drag_pos = event.globalPosition().toPoint()
-        else:
-            edge = self._resize_edge_at(event.position().toPoint())
-            self.setCursor(self._cursor_for_edge(edge))
-        super().mouseMoveEvent(event)
+    def mouseDoubleClickEvent(self, event):
+        """双击标题栏快速最大化/还原"""
+        if event.button() == Qt.MouseButton.LeftButton and event.position().y() <= 36:
+            self._toggle_maximized()
+            return
+        super().mouseDoubleClickEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        self._drag_pos = None
-        super().mouseReleaseEvent(event)
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton:
+            # 原生拖动由系统处理，此处仅更新光标
+            pass
+        edge = self._resize_edge_at(event.position().toPoint())
+        self.setCursor(self._cursor_for_edge(edge))
+        super().mouseMoveEvent(event)
 
     def _build_nav_item(self, icon_key: str, text: str, enabled: bool,
                         handler, badge: int, checkable: bool = False,
@@ -322,6 +418,8 @@ class MainWindow(QMainWindow):
             badge_lbl.setObjectName("NavBadge")
             badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lay.addWidget(badge_lbl)
+        if enabled:
+            animations.install_button_hover_animation(btn, scale=1.01)
         return btn
 
     # ---------------- 侧边栏 ----------------
@@ -407,6 +505,7 @@ class MainWindow(QMainWindow):
         about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         about_btn.setFixedHeight(28)
         about_btn.clicked.connect(self._on_about_author)
+        animations.install_button_hover_animation(about_btn, scale=1.02)
         lay.addWidget(about_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
         return sidebar
 
@@ -455,6 +554,7 @@ class MainWindow(QMainWindow):
         self.btn_fetch.setProperty("cls", "primary")
         self.btn_fetch.setProperty("size", "lg")
         self.btn_fetch.setCursor(Qt.CursorShape.PointingHandCursor)
+        animations.install_button_hover_animation(self.btn_fetch, scale=1.02)
         left.addWidget(self.btn_fetch)
 
         # 搜索框（带内嵌图标）
@@ -494,7 +594,7 @@ class MainWindow(QMainWindow):
         right.setSpacing(8)
         self.btn_refresh = self._build_icon_btn("refresh_cw", "刷新", self._load_master)
         self.btn_import = self._build_icon_btn("upload", "导入", self._on_placeholder)
-        self.btn_export = self._build_icon_btn("download", "导出", self._on_placeholder)
+        self.btn_export = self._build_icon_btn("download", "导出", self._on_export)
         self.btn_more = self._build_icon_btn("more_vertical", "更多", self._on_dedup)
         right.addWidget(self.btn_refresh)
         right.addWidget(self.btn_import)
@@ -504,8 +604,16 @@ class MainWindow(QMainWindow):
 
         # 事件绑定（下拉框内部 QComboBox 已连接）
         self.btn_fetch.clicked.connect(self._on_fetch)
-        self.search_edit.textChanged.connect(self._refresh_view)
+        self.search_edit.textChanged.connect(self._on_search_text_changed)
         return self.toolbar
+
+    def _on_search_text_changed(self):
+        """搜索输入变化时防抖刷新；清空时立即恢复"""
+        self._search_timer.stop()
+        if not self.search_edit.text().strip():
+            self._refresh_view()
+        else:
+            self._search_timer.start()
 
     def _build_select(self, icon_key: str, initial: str, options: list[str]) -> QWidget:
         """设计稿风格的带图标下拉选择框"""
@@ -541,11 +649,37 @@ class MainWindow(QMainWindow):
         btn.setFixedSize(36, 36)
         if handler:
             btn.clicked.connect(handler)
+        animations.install_button_hover_animation(btn, scale=1.08)
         return btn
 
     def _on_placeholder(self):
         """占位按钮：记录即将推出的提示"""
         self._append_log("该功能即将推出，敬请期待", logging.INFO)
+
+    def _on_export(self):
+        """导出当前筛选后的记录"""
+        records = list(self.model.rows)
+        if not records:
+            self._append_log("没有数据可导出", logging.WARNING)
+            return
+
+        from PyQt6.QtWidgets import QFileDialog
+        default_name = f"bilihistory_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "导出记录", default_name, supported_filters()
+        )
+        if not file_path:
+            return
+
+        # 若用户未填写扩展名，默认补 .csv
+        if not os.path.splitext(file_path)[1]:
+            file_path += ".csv"
+
+        try:
+            export_records(records, file_path)
+            self._append_log(f"已导出 {len(records)} 条记录到: {file_path}", logging.INFO)
+        except Exception as e:
+            self._append_log(f"导出失败: {e}", logging.ERROR)
 
     def _on_about_author(self):
         """打开关于作者弹窗"""
@@ -575,7 +709,8 @@ class MainWindow(QMainWindow):
         banner_close.setObjectName("SuccessBannerClose")
         banner_close.setFixedSize(24, 24)
         banner_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        banner_close.clicked.connect(lambda: self.banner.setVisible(False))
+        banner_close.clicked.connect(self._hide_banner)
+        animations.install_button_hover_animation(banner_close, scale=1.12)
         banner_lay.addWidget(self.banner_icon)
         banner_lay.addWidget(self.banner_label, stretch=1)
         banner_lay.addWidget(banner_close)
@@ -597,6 +732,12 @@ class MainWindow(QMainWindow):
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(44)
         self.table.setFrameShape(QFrame.Shape.NoFrame)
+        # 滚动优化：按像素滚动，避免行高切换时的跳跃感
+        self.table.setVerticalScrollMode(QTableView.ScrollMode.ScrollPerPixel)
+        self.table.setHorizontalScrollMode(QTableView.ScrollMode.ScrollPerPixel)
+
+        # 表格行 hover 高亮过渡动画
+        animations.HoverRowTracker(self.table, self.model)
 
         # 列委托与列宽（类型/标题/UP主/进度/分类/时间/BV号/操作）
         self.table.setItemDelegateForColumn(0, TagDelegate(self.table))
@@ -624,6 +765,16 @@ class MainWindow(QMainWindow):
         card_lay.addWidget(self.table)
         lay.addWidget(card, stretch=1)
         return page
+
+    def _show_banner(self):
+        """淡入显示完成横幅"""
+        if not self.banner.isVisible():
+            animations.fade_in(self.banner, duration=180)
+
+    def _hide_banner(self):
+        """淡出隐藏完成横幅"""
+        if self.banner.isVisible():
+            animations.fade_out(self.banner, duration=150)
 
     def _build_empty_page(self) -> QWidget:
         page = QWidget()
@@ -851,8 +1002,12 @@ class MainWindow(QMainWindow):
         self.db_label.setObjectName("StatusDb")
         self.plan_badge = QLabel("")
         self.plan_badge.setObjectName("PlanBadge")
+        self._update_badge = QLabel("")
+        self._update_badge.setObjectName("UpdateBadge")
+        self._update_badge.setVisible(False)
         right.addWidget(self.db_label)
         right.addWidget(self.plan_badge)
+        right.addWidget(self._update_badge)
 
         lay.addLayout(left)
         lay.addStretch(1)
@@ -992,15 +1147,15 @@ class MainWindow(QMainWindow):
     # ================= 状态切换 =================
     def _show_state(self, state: str):
         """empty / normal / loading 三页切换（complete 复用 normal 页 + 横幅）"""
+        target = self.page_loading if state == "loading" else (
+            self.page_empty if state == "empty" else self.page_table)
+
         if state == "loading":
-            self.stack.setCurrentWidget(self.page_loading)
             self._spinner_timer.start()
-        elif state == "empty":
-            self.stack.setCurrentWidget(self.page_empty)
-            self._spinner_timer.stop()
         else:
-            self.stack.setCurrentWidget(self.page_table)
             self._spinner_timer.stop()
+
+        self._fade_to_page(target)
 
         # 空态/抓取中禁用搜索筛选
         interactive = state == "normal"
@@ -1014,10 +1169,43 @@ class MainWindow(QMainWindow):
         else:
             self.search_edit.setPlaceholderText("搜索视频标题、UP主、BV号...")
 
+    def _fade_to_page(self, target):
+        """页面切换淡入动画，让状态变化更丝滑"""
+        from PyQt6.QtWidgets import QGraphicsOpacityEffect
+        from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
+
+        current = self.stack.currentWidget()
+        if current is target:
+            return
+
+        # 若目标页没有 opacity effect，创建一个
+        effect = target.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(target)
+            target.setGraphicsEffect(effect)
+        effect.setOpacity(0.0)
+
+        self.stack.setCurrentWidget(target)
+
+        anim = QPropertyAnimation(effect, b"opacity", target)
+        anim.setDuration(180)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
+
     # ================= 数据加载与展示 =================
     def _load_master(self):
-        """从磁盘加载总表并刷新表格"""
-        self.storage.load()
+        """从磁盘加载总表并刷新表格（后台线程加载，避免阻塞 UI）"""
+        self._load_worker = _LoadStorageWorker(self.storage, self)
+        self._load_worker.ready.connect(self._on_storage_loaded)
+        self._load_worker.start()
+
+    def _on_storage_loaded(self, storage):
+        """本地记录加载完成后刷新 UI"""
+        self._load_worker = None
+        if storage is None:
+            self._append_log("本地记录加载失败", logging.ERROR)
         self._refresh_view()
 
     def _refresh_view(self):
@@ -1043,7 +1231,7 @@ class MainWindow(QMainWindow):
         sort_col = header.sortIndicatorSection()
         sort_order = header.sortIndicatorOrder()
 
-        self.model.set_rows(rows)
+        self.model.update_rows(rows)
         if sort_col >= 0:
             self.table.sortByColumn(sort_col, sort_order)
 
@@ -1129,14 +1317,13 @@ class MainWindow(QMainWindow):
     def _set_status_dot(self, state: str):
         """状态指示点：success / warn / error / gray"""
         colors = {
-            "success": (theme.SUCCESS, "0 0 6px rgba(0,181,120,0.4)"),
-            "warn": (theme.WARN, "0 0 6px rgba(255,155,41,0.4)"),
-            "error": (theme.DANGER, "0 0 6px rgba(240,72,56,0.4)"),
-            "gray": (theme.TEXT_DISABLED, "none"),
+            "success": theme.SUCCESS,
+            "warn": theme.WARN,
+            "error": theme.DANGER,
+            "gray": theme.TEXT_DISABLED,
         }
-        color, shadow = colors.get(state, colors["gray"])
-        self.status_dot.setStyleSheet(
-            f"background:{color};border-radius:4px;box-shadow:{shadow};")
+        color = colors.get(state, colors["gray"])
+        self.status_dot.setStyleSheet(f"background:{color};border-radius:4px;")
 
     # ================= 动作 =================
     def _on_settings(self):
@@ -1222,7 +1409,7 @@ class MainWindow(QMainWindow):
         self.btn_import.setEnabled(False)
         self.btn_export.setEnabled(False)
         self.btn_more.setEnabled(False)
-        self.banner.setVisible(False)
+        self._hide_banner()
         self._show_state("loading")
 
         self.count_label.setText("正在抓取中...")
@@ -1282,7 +1469,7 @@ class MainWindow(QMainWindow):
             f"{added}</span> 条记录，"
             f"总计 <span style='color:{theme.SUCCESS};font-size:16px;font-weight:700;'>"
             f"{total}</span> 条，已自动备份快照。")
-        self.banner.setVisible(True)
+        self._show_banner()
         if snapshot:
             self.snapshot_label.setText(f"快照: {snapshot}")
             self.sep_snapshot.setVisible(True)
@@ -1326,7 +1513,7 @@ class MainWindow(QMainWindow):
         self.banner_label.setText(
             f"抓取已取消，已保留 <span style='color:{theme.WARN};font-size:16px;font-weight:700;'>"
             f"{total}</span> 条记录（本次新增 {added} 条）")
-        self.banner.setVisible(True)
+        self._show_banner()
         if snapshot:
             self.snapshot_label.setText(f"快照: {snapshot}")
             self.sep_snapshot.setVisible(True)
@@ -1422,7 +1609,19 @@ class MainWindow(QMainWindow):
             not self.log_view.isVisible() and not has_status)
 
     def closeEvent(self, event):
-        # 等待抓取线程安全退出
+        # 等待后台线程安全退出
         if self.worker and self.worker.isRunning():
             self.worker.wait(3000)
+        if self._load_worker and self._load_worker.isRunning():
+            if not self._load_worker.wait(1000):
+                self._load_worker.terminate()
+                self._load_worker.wait(500)
+        if self._reg_worker and self._reg_worker.isRunning():
+            if not self._reg_worker.wait(2000):
+                self._reg_worker.terminate()
+                self._reg_worker.wait(500)
+        if self._update_worker and self._update_worker.isRunning():
+            if not self._update_worker.wait(2000):
+                self._update_worker.terminate()
+                self._update_worker.wait(500)
         super().closeEvent(event)

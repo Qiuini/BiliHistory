@@ -12,7 +12,7 @@ PyInstaller 打包配置 - B站历史记录管理工具（GUI）
 - 私钥 tools/private_key.pem 不会被打包（仅内置公钥 src/licensing/keys.py）。
 - 用户数据（Cookie / CSV / 授权 / 试用）运行时写入用户数据目录，不在安装目录。
 """
-:
+
 import sys
 from pathlib import Path
 

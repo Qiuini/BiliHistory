@@ -184,9 +184,9 @@ class TestHistoryStorage:
         try:
             storage = HistoryStorage(temp_file)
             storage._data = [
-                {'标题': '早', '观看时间': '2024-06-01 00:00:00'},
-                {'标题': '晚', '观看时间': '2024-06-03 00:00:00'},
-                {'标题': '中', '观看时间': '2024-06-02 00:00:00'},
+                {'标题': '早', 'BV号': 'BV1', '观看时间': '2024-06-01 00:00:00'},
+                {'标题': '晚', 'BV号': 'BV2', '观看时间': '2024-06-03 00:00:00'},
+                {'标题': '中', 'BV号': 'BV3', '观看时间': '2024-06-02 00:00:00'},
             ]
 
             storage.sort_by_time(reverse=True)
@@ -196,3 +196,35 @@ class TestHistoryStorage:
         finally:
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
+
+    def test_load_skips_dirty_rows(self):
+        """脏行（缺少 ID、时间格式错误）应被跳过"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+            temp_file = f.name
+
+        try:
+            storage = HistoryStorage(temp_file)
+            storage._data = [
+                {'标题': '正常', 'BV号': 'BV1', '观看时间': '2024-06-01 00:00:00', 'UP主': 'UP'},
+                {'标题': '缺少ID', '观看时间': '2024-06-01 00:00:00'},
+                {'标题': '时间错误', 'BV号': 'BV2', '观看时间': 'bad-time'},
+            ]
+            storage.save()
+
+            new_storage = HistoryStorage(temp_file).load()
+            assert new_storage.count == 1
+            assert new_storage.records[0]['标题'] == '正常'
+
+        finally:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    def test_record_factory_handles_missing_fields(self):
+        """缺少可选字段时不应崩溃"""
+        storage = HistoryStorage("/dev/null")
+        storage._data = [
+            {'标题': '缺字段', 'BV号': 'BV1', '观看时间': '2024-06-01 00:00:00'}
+        ]
+        records = storage._to_records()
+        assert len(records) == 1
+        assert records[0].bvid == 'BV1'

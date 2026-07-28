@@ -5,6 +5,7 @@ cryptography>=41.0
 
 # 开发 / 测试
 pytest>=7.0
+pytest-qt>=4.0
 
 # 打包（构建时使用）
 pyinstaller>=6.0

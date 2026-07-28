@@ -31,6 +31,9 @@ class QtLogHandler(logging.Handler):
             msg = self.format(record)
             # 通过信号跨线程安全地送回主线程（Qt 队列连接）
             self.emitter.message.emit(msg, record.levelno)
+        except RuntimeError:
+            # 应用关闭后 Qt 对象可能已被销毁，静默忽略
+            pass
         except Exception:
             self.handleError(record)
 

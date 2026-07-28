@@ -4,11 +4,13 @@
 所有业务弹窗（Cookie设置/会员激活/结果反馈等）继承 ModalDialog，
 调用 add_header / body_layout / add_footer 组装内容。
 """
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QWidget,
     QFrame, QScrollArea
 )
+
+from gui.animations import fade_in, slide_in
 
 
 class ModalDialog(QDialog):
@@ -22,6 +24,16 @@ class ModalDialog(QDialog):
         self._root.setContentsMargins(0, 0, 0, 0)
         self._root.setSpacing(0)
         self._body_widget: QWidget | None = None
+        self._shown = False
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._shown:
+            return
+        self._shown = True
+        # 首次显示时做淡入 + 轻微上滑，提升弹窗出现质感
+        QTimer.singleShot(0, lambda: fade_in(self, duration=160))
+        QTimer.singleShot(0, lambda: slide_in(self, direction="up", distance=16, duration=180))
 
     # ---------------- header ----------------
     def add_header(self, title: str, subtitle: str = "",

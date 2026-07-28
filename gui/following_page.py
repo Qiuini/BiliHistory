@@ -4,7 +4,7 @@
 import webbrowser
 from typing import List
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGridLayout, QScrollArea,
@@ -12,30 +12,9 @@ from PyQt6.QtWidgets import (
 )
 
 from gui import theme
+from gui.image_loader import ImageLoader
+from gui.animations import install_card_scale_animation
 from models import FollowingRecord
-
-
-class AvatarLoader(QThread):
-    """简单的头像下载线程（避免阻塞 UI）"""
-    loaded = pyqtSignal(str, QPixmap)
-
-    def __init__(self, url: str, mid: str, parent=None):
-        super().__init__(parent)
-        self.url = url
-        self.mid = mid
-
-    def run(self):
-        try:
-            import requests
-            resp = requests.get(self.url, timeout=5,
-                                headers={"User-Agent": "Mozilla/5.0"})
-            if resp.status_code == 200:
-                pixmap = QPixmap()
-                pixmap.loadFromData(resp.content)
-                if not pixmap.isNull():
-                    self.loaded.emit(self.mid, pixmap)
-        except Exception:
-            pass
 
 
 class FollowingCard(QFrame):
@@ -98,6 +77,9 @@ class FollowingCard(QFrame):
         lay.addWidget(self.avatar)
         lay.addLayout(info, stretch=1)
 
+        # 卡片 hover 轻微放大，提升触感
+        install_card_scale_animation(self, scale=1.015, duration=120)
+
     def _avatar_style(self, letter: str) -> str:
         idx = sum(ord(c) for c in self.record.mid) % len(theme.ACCENT_PALETTE)
         color = theme.ACCENT_PALETTE[idx]
@@ -112,9 +94,7 @@ class FollowingCard(QFrame):
         """
 
     def _set_avatar(self, pixmap: QPixmap):
-        scaled = pixmap.scaled(56, 56, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                               Qt.TransformationMode.SmoothTransformation)
-        self.avatar.setPixmap(scaled)
+        self.avatar.setPixmap(pixmap)
         self.avatar.setText("")
         self.avatar.setStyleSheet("border-radius:28px;")
 
@@ -131,7 +111,7 @@ class FollowingPage(QWidget):
         super().__init__(parent)
         self.setObjectName("FollowingPage")
         self._records: List[FollowingRecord] = []
-        self._threads: List[AvatarLoader] = []
+        self._image_loader = ImageLoader(parent=self)
         self._build_ui()
 
     def _build_ui(self):
@@ -179,19 +159,17 @@ class FollowingPage(QWidget):
             col = i % 3
             self.grid.addWidget(card, row, col)
 
-            # 尝试异步加载头像
+            # 异步加载头像（带缓存）
             if record.face:
-                loader = AvatarLoader(record.face, record.mid, self)
-                loader.loaded.connect(lambda mid, pixmap, c=card: c._set_avatar(pixmap))
-                loader.start()
-                self._threads.append(loader)
+                self._image_loader.load(
+                    record.face,
+                    callback=lambda pixmap, c=card: c._set_avatar(pixmap),
+                    size=(56, 56),
+                )
 
     def _clear_grid(self):
         while self.grid.count():
             item = self.grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for t in self._threads:
-            if t.isRunning():
-                t.terminate()
-        self._threads.clear()
+        self._image_loader.clear_memory()

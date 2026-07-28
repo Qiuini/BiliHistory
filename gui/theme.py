@@ -240,7 +240,7 @@ QLabel#NavBadge {{
     font-weight: 600;
     background: transparent;
 }}
-:#VersionLabel {{
+#VersionLabel {{
     color: {TEXT_DISABLED};
     font-size: 11px;
     background: transparent;
@@ -618,6 +618,18 @@ QLabel#PlanBadge {{
     font-size: 12px;
     background: transparent;
 }}
+QLabel#UpdateBadge {{
+    color: {BLUE};
+    font-weight: 600;
+    font-size: 12px;
+    background: {BLUE_LIGHT};
+    border-radius: 4px;
+    padding: 2px 8px;
+}}
+QLabel#UpdateBadge:hover {{
+    color: {BLUE_HOVER};
+    background: #C8ECFA;
+}}
 
 /* ================= 日志条 / 日志面板 ================= */
 #LogBar {{
@@ -717,7 +729,6 @@ QPushButton#LinkBtn {{
 }}
 QPushButton#LinkBtn:hover {{
     color: {PINK_HOVER};
-    text-decoration: underline;
 }}
 
 /* ================= 抓取进度卡 ================= */
@@ -825,7 +836,6 @@ QLabel#SuccessBannerIcon {{
 QLabel#SuccessBannerText {{
     color: {SUCCESS};
     font-size: 14px;
-    line-height: 1.6;
     background: transparent;
 }}
 #SuccessBanner[variant="warning"] QLabel#SuccessBannerText {{
@@ -1018,7 +1028,6 @@ QLabel#MachineCode {{
     font-family: {MONO};
     font-size: 14px;
     font-weight: 600;
-    letter-spacing: 1px;
     color: {TEXT};
     background: transparent;
 }}

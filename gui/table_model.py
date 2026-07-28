@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import List, Set
 
-from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PyQt6.QtCore import QAbstractTableModel, Qt, QModelIndex, QVariantAnimation, QEasingCurve
 from PyQt6.QtGui import QColor
 
 # 类型英文值 -> 中文显示
@@ -19,6 +19,18 @@ ProgressRole = Qt.ItemDataRole.UserRole + 2    # 观看进度 0.0~1.0，-1 表�
 ProgressTextRole = Qt.ItemDataRole.UserRole + 3  # "45%" / "已看完" / ""
 LinkRole = Qt.ItemDataRole.UserRole + 4        # 打开链接
 NewRole = Qt.ItemDataRole.UserRole + 5         # 本次新增记录标记
+HoverRole = Qt.ItemDataRole.UserRole + 6       # hover 进度 0.0~1.0
+
+
+def _blend_color(base: QColor, target: QColor, t: float) -> QColor:
+    """线性混合两个颜色，t ∈ [0, 1]"""
+    t = max(0.0, min(1.0, t))
+    return QColor(
+        int(base.red() + (target.red() - base.red()) * t),
+        int(base.green() + (target.green() - base.green()) * t),
+        int(base.blue() + (target.blue() - base.blue()) * t),
+        int(base.alpha() + (target.alpha() - base.alpha()) * t),
+    )
 
 
 class HistoryTableModel(QAbstractTableModel):
@@ -30,19 +42,113 @@ class HistoryTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._rows: List[dict] = rows or []
         self._new_ids: Set[str] = set()
+        self._hover_row = -1
+        self._hover_progress = 0.0
+        self._hover_anim = QVariantAnimation(self)
+        self._hover_anim.setDuration(150)
+        self._hover_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._hover_anim.valueChanged.connect(self._on_hover_progress)
 
     # ---- 数据设置 ----
+    @property
+    def rows(self) -> List[dict]:
+        """返回当前模型中的原始记录列表"""
+        return self._rows
+
     def set_rows(self, rows: List[dict]):
-        """整体刷新数据"""
+        """整体刷新数据（首次/清空等场景使用）"""
         self.beginResetModel()
         self._rows = rows or []
         self.endResetModel()
 
+    def update_rows(self, rows: List[dict]):
+        """增量刷新：按记录键比较，只做 insert/remove/update，避免 beginResetModel
+
+        适用于大数据量时筛选/加载等频繁刷新场景，保留选中与滚动位置。
+        """
+        rows = rows or []
+        new_keys = [self._record_key(r) for r in rows]
+        old_keys = [self._record_key(r) for r in self._rows]
+        new_set = set(new_keys)
+        old_set = set(old_keys)
+
+        # 1) 删除旧集合中不存在于新集合的行（从后往前删，避免索引偏移）
+        for i in range(len(old_keys) - 1, -1, -1):
+            if old_keys[i] not in new_set:
+                self.beginRemoveRows(QModelIndex(), i, i)
+                del self._rows[i]
+                del old_keys[i]
+                self.endRemoveRows()
+
+        # 2) 按新顺序插入/更新行
+        for i, r in enumerate(rows):
+            key = new_keys[i]
+            if key not in old_set:
+                self.beginInsertRows(QModelIndex(), i, i)
+                self._rows.insert(i, r)
+                self.endInsertRows()
+                # 更新 old_keys 以保持一致（后续不会再访问到新插入的 key）
+                old_keys.insert(i, key)
+                continue
+
+            # 找到当前位置并更新数据
+            try:
+                current_idx = next(j for j, row in enumerate(self._rows)
+                                   if self._record_key(row) == key)
+            except StopIteration:
+                continue
+            if self._rows[current_idx] != r:
+                self._rows[current_idx] = r
+                self.dataChanged.emit(
+                    self.index(current_idx, 0),
+                    self.index(current_idx, self.columnCount() - 1),
+                )
+
     def set_new_ids(self, ids: Set[str]):
         """标记本次抓取新增的记录 ID（complete 态 NEW 标签 + 淡绿底）"""
-        self.beginResetModel()
+        old_ids = self._new_ids
         self._new_ids = ids or set()
-        self.endResetModel()
+
+        changed_rows = []
+        for i, r in enumerate(self._rows):
+            key = self._record_key(r)
+            in_old = key in old_ids
+            in_new = key in self._new_ids
+            if in_old != in_new:
+                changed_rows.append(i)
+
+        for row in changed_rows:
+            self.dataChanged.emit(
+                self.index(row, 0),
+                self.index(row, self.columnCount() - 1),
+            )
+
+    # ---- hover 行动画 ----
+    def set_hover_row(self, row: int):
+        """设置当前 hover 行，触发动画"""
+        old_row = self._hover_row
+        if old_row == row and self._hover_progress == (1.0 if row >= 0 else 0.0):
+            return
+
+        self._hover_row = row
+        self._hover_anim.stop()
+        self._hover_anim.setStartValue(int(self._hover_progress * 255))
+        self._hover_anim.setEndValue(255 if row >= 0 else 0)
+        self._hover_anim.start()
+
+        if old_row >= 0 and old_row != row and old_row < len(self._rows):
+            self.dataChanged.emit(
+                self.index(old_row, 0),
+                self.index(old_row, self.columnCount() - 1),
+            )
+
+    def _on_hover_progress(self, value):
+        self._hover_progress = value / 255.0
+        if self._hover_row >= 0 and self._hover_row < len(self._rows):
+            self.dataChanged.emit(
+                self.index(self._hover_row, 0),
+                self.index(self._hover_row, self.columnCount() - 1),
+            )
 
     # ---- 内部取值 ----
     @staticmethod
@@ -109,8 +215,17 @@ class HistoryTableModel(QAbstractTableModel):
                     or item.get("专栏链接") or "")
         if role == NewRole:
             return is_new
-        if role == Qt.ItemDataRole.BackgroundRole and is_new:
-            return QColor("#EFFBF5")  # 新增行淡绿底
+        if role == HoverRole:
+            return self._hover_progress if index.row() == self._hover_row else 0.0
+        if role == Qt.ItemDataRole.BackgroundRole:
+            if is_new:
+                base = QColor("#FFFFFF")
+                target = QColor("#EFFBF5")
+                return _blend_color(base, target, 1.0)
+            if index.row() == self._hover_row and self._hover_progress > 0:
+                base = QColor("#FFFFFF")
+                target = QColor("#FFF0F4")  # PINK_LIGHT
+                return _blend_color(base, target, self._hover_progress)
         if role == Qt.ItemDataRole.ForegroundRole:
             if col == "BV号":
                 return QColor("#B0B0BE")

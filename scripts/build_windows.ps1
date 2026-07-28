@@ -45,7 +45,11 @@ Write-Host "==> Installing build dependencies..."
 Write-Host "==> Building portable executable with PyInstaller..."
 & $py -m PyInstaller packaging\bilihistory.spec --noconfirm --clean
 
-$artifact = Join-Path $root 'dist' 'BiliHistory.exe'
+function Join-Paths([string]$base, [string]$child, [string]$leaf) {
+    return Join-Path (Join-Path $base $child) $leaf
+}
+
+$artifact = Join-Paths $root 'dist' 'BiliHistory.exe'
 Write-Host "==> Portable executable: $artifact"
 
 # Build NSIS installer if available
@@ -55,14 +59,14 @@ if ($nsis) {
     Write-Host "==> Building installer with NSIS..."
     Get-ChildItem -Path (Join-Path $root 'dist') -Recurse -ErrorAction SilentlyContinue
     $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
-    $exe = Resolve-Path (Join-Path $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
+    $exe = Resolve-Path (Join-Paths $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
     if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-    $out = Join-Path $root 'dist' "BiliHistory-${version}-setup.exe"
+    $out = Join-Paths $root 'dist' "BiliHistory-${version}-setup.exe"
     Write-Host "Using icon: $ico"
     Write-Host "Using source exe: $exe"
     Write-Host "Using output file: $out"
     & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" "/DAPP_VERSION=$version" packaging\installer.nsi
-    $setup = Join-Path $root 'dist' "BiliHistory-${version}-setup.exe"
+    $setup = Join-Paths $root 'dist' "BiliHistory-${version}-setup.exe"
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"
     } else {
