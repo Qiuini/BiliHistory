@@ -47,16 +47,15 @@ $nsis = Get-ChildItem -Path "${env:ProgramFiles(x86)}\NSIS" -Filter makensis.exe
 if (-not $nsis) { $nsis = Get-Command makensis -ErrorAction SilentlyContinue }
 if ($nsis) {
     Write-Host "==> Building installer with NSIS..."
+    Get-ChildItem -Path (Join-Path $root 'dist') -Recurse -ErrorAction SilentlyContinue
     $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
-    $icoNsis = $ico -replace '\\', '/'
     $exe = Resolve-Path (Join-Path $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
     if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-    $exeNsis = $exe -replace '\\', '/'
-    $outNsis = (($root -replace '\\', '/') + '/dist/BiliHistory-1.0.0-setup.exe')
-    Write-Host "Using icon: $icoNsis"
-    Write-Host "Using source exe: $exeNsis"
-    Write-Host "Using output file: $outNsis"
-    & $nsis.FullName "/DICON_PATH=$icoNsis" "/DSOURCE_EXE=$exeNsis" "/DOUT_FILE=$outNsis" packaging\installer.nsi
+    $out = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
+    Write-Host "Using icon: $ico"
+    Write-Host "Using source exe: $exe"
+    Write-Host "Using output file: $out"
+    & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" packaging\installer.nsi
     $setup = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"

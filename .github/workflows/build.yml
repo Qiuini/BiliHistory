@@ -39,6 +39,9 @@ jobs:
         run: python -m PyInstaller packaging/bilihistory.spec --noconfirm --clean
       - name: Install NSIS
         run: choco install nsis -y
+      - name: List dist contents
+        shell: pwsh
+        run: Get-ChildItem -Path dist -Recurse -ErrorAction SilentlyContinue
       - name: Build installer
         shell: pwsh
         run: |
@@ -47,16 +50,13 @@ jobs:
           if (-not $nsis) { throw "NSIS not found after installation" }
           $ico = Resolve-Path favicon.ico | Select-Object -ExpandProperty Path
           if (-not (Test-Path $ico)) { throw "favicon.ico not found at $ico" }
-          $icoNsis = $ico -replace '\\', '/'
           $exe = Resolve-Path dist\BiliHistory.exe | Select-Object -ExpandProperty Path
           if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-          $exeNsis = $exe -replace '\\', '/'
-          $out = Resolve-Path dist | Select-Object -ExpandProperty Path
-          $outNsis = ($out -replace '\\', '/') + '/BiliHistory-1.0.0-setup.exe'
-          Write-Host "Using icon: $icoNsis"
-          Write-Host "Using source exe: $exeNsis"
-          Write-Host "Using output file: $outNsis"
-          & $nsis.FullName "/DICON_PATH=$icoNsis" "/DSOURCE_EXE=$exeNsis" "/DOUT_FILE=$outNsis" packaging\installer.nsi
+          $out = Join-Path (Resolve-Path dist | Select-Object -ExpandProperty Path) 'BiliHistory-1.0.0-setup.exe'
+          Write-Host "Using icon: $ico"
+          Write-Host "Using source exe: $exe"
+          Write-Host "Using output file: $out"
+          & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" packaging\installer.nsi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
