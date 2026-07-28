@@ -61,7 +61,8 @@ if command -v appimagetool >/dev/null 2>&1; then
   fi
   printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/%s" "$@"\n' "${APP_LOWER}" > "$APPDIR/AppRun"
   chmod +x "$APPDIR/AppRun"
-  appimagetool "$APPDIR" "dist/${APP}-x86_64.AppImage"
+  # GitHub Actions 等容器环境通常缺少 FUSE，使用 --appimage-extract-and-run 避免依赖 libfuse2
+  appimagetool --appimage-extract-and-run "$APPDIR" "dist/${APP}-x86_64.AppImage"
 else
   echo "!! 未检测到 appimagetool，跳过 AppImage 构建"
 fi
