@@ -1,0 +1,10 @@
+# 运行时依赖
+requests>=2.28
+PyQt6>=6.5
+cryptography>=41.0
+
+# 开发 / 测试
+pytest>=7.0
+
+# 打包（构建时使用）
+pyinstaller>=6.0

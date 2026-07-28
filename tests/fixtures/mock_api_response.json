@@ -1,0 +1,57 @@
+{
+  "code": 0,
+  "data": {
+    "cursor": {
+      "max": 98765,
+      "view_at": 1718600000,
+      "business": "article",
+      "ps": 30
+    },
+    "list": [
+      {
+        "title": "测试视频1",
+        "history": {"oid": 111222333, "bvid": "BV1234567890", "business": "archive", "page": 1, "cid": 1001, "part": "P1"},
+        "author_name": "UP主A",
+        "author_mid": 10001,
+        "view_at": 1718900000,
+        "duration": 600,
+        "progress": 300,
+        "tname": "音乐",
+        "badge": "",
+        "kid": 111222333
+      },
+      {
+        "title": "测试视频2",
+        "history": {"oid": 444555666, "bvid": "BV0987654321", "business": "archive", "page": 1, "cid": 1002, "part": "P1"},
+        "author_name": "UP主B",
+        "author_mid": 10002,
+        "view_at": 1718800000,
+        "duration": 1200,
+        "progress": -1,
+        "tag_name": "科技",
+        "badge": "",
+        "kid": 444555666
+      },
+      {
+        "title": "测试直播",
+        "history": {"oid": 123456, "bvid": "", "business": "live"},
+        "author_name": "主播A",
+        "author_mid": 10003,
+        "view_at": 1718700000,
+        "badge": "未开播",
+        "kid": 123456
+      },
+      {
+        "title": "测试专栏",
+        "history": {"oid": 98765, "bvid": "", "business": "article"},
+        "author_name": "作者A",
+        "author_mid": 10004,
+        "view_at": 1718600000,
+        "category": "数码",
+        "template_id": 188,
+        "badge": "",
+        "kid": 98765
+      }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "file_paths": {
+    "csv_file": ""
+  },
+  "request_params": {
+    "page_size": 30,
+    "fetch_all": true,
+    "incremental_update": true
+  },
+  "request_headers": {
+    "user_agents": [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/119.0",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15"
+    ]
+  },
+  "http_retry": {
+    "total": 3,
+    "backoff_factor": 1,
+    "status_forcelist": [429, 500, 502, 503, 504],
+    "allowed_methods": ["GET"]
+  },
+  "function_retry": {
+    "max_attempts": 3,
+    "wait_seconds": 2
+  },
+  "api_endpoints": {
+    "history_api": "https://api.bilibili.com/x/web-interface/history/cursor",
+    "followings_api": "https://api.bilibili.com/x/relation/followings",
+    "fav_folder_api": "https://api.bilibili.com/x/v3/fav/folder/list",
+    "fav_resource_api": "https://api.bilibili.com/x/v3/fav/resource/list",
+    "user_card_api": "https://api.bilibili.com/x/web-interface/card"
+  }
+}

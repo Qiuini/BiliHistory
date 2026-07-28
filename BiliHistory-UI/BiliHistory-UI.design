@@ -1,0 +1,185 @@
+{
+  "data": [
+    {
+      "id": "page-main-empty",
+      "title": "主窗口 - 空白引导页",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/main-empty.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-main-normal",
+      "title": "主窗口 - 正常数据浏览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000001,
+      "canvasData": {
+        "x": 620,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/main-normal.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-main-loading",
+      "title": "主窗口 - 抓取加载中",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000002,
+      "canvasData": {
+        "x": 1240,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/main-loading.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-main-complete",
+      "title": "主窗口 - 抓取完成",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000003,
+      "canvasData": {
+        "x": 1860,
+        "y": 0,
+        "group": 0
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/main-complete.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-cookie",
+      "title": "Cookie设置弹窗",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000004,
+      "canvasData": {
+        "x": 0,
+        "y": 377,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-cookie.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-activation",
+      "title": "会员激活弹窗 - 未激活",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000005,
+      "canvasData": {
+        "x": 620,
+        "y": 377,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-activation.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-activation-success",
+      "title": "会员激活弹窗 - 激活成功",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000006,
+      "canvasData": {
+        "x": 1240,
+        "y": 377,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-activation-success.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-activation-failed",
+      "title": "会员激活弹窗 - 激活失败",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000007,
+      "canvasData": {
+        "x": 1860,
+        "y": 377,
+        "group": 1
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-activation-failed.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-trial-exhausted",
+      "title": "试用耗尽转化弹窗",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000008,
+      "canvasData": {
+        "x": 0,
+        "y": 754,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-trial-exhausted.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-feedback-error",
+      "title": "消息反馈 - Cookie失效",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000009,
+      "canvasData": {
+        "x": 620,
+        "y": 754,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-feedback-error.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-modal-feedback-complete",
+      "title": "消息反馈 - 抓取完成统计",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1753600000010,
+      "canvasData": {
+        "x": 1240,
+        "y": 754,
+        "group": 2
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/modal-feedback-complete.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "BiliHistory 高保真原型"
+  }
+}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=BiliHistory
+Name[zh_CN]=B站历史记录管理工具
+Comment=Manage your Bilibili watch history
+Comment[zh_CN]=抓取、备份并管理个人B站观看历史
+Exec=@APP@
+Icon=@APP@
+Terminal=false
+Categories=Utility;Network;

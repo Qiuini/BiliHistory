@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站历史记录工具使用说明书</title>
+    <style>
+        :root {
+            --primary-color: #FB7299;
+            --secondary-color: #23ADE5;
+            --text-color: #333;
+            --light-bg: #f5f7fa;
+            --border-color: #e0e0e0;
+            --code-bg: #f8f8f8;
+            --success-color: #52c41a;
+            --warning-color: #faad14;
+            --danger-color: #ff4d4f;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: #fff;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 60px 0 40px;
+            margin-bottom: 40px;
+            border-radius: 0 0 10px 10px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        h2 {
+            font-size: 1.8rem;
+            margin: 30px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+        h3 {
+            font-size: 1.4rem;
+            margin: 25px 0 15px;
+            color: var(--secondary-color);
+        }
+        p {
+            margin-bottom: 15px;
+            font-size: 1.05rem;
+        }
+        ul, ol {
+            margin: 0 0 20px 25px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        .feature-card {
+            background-color: var(--light-bg);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--primary-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .code-block {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .command-example {
+            background-color: #282c34;
+            color: #abb2bf;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .command-example span {
+            color: #e06c75;
+        }
+        .command-example .option {
+            color: #d19a66;
+        }
+        .command-example .description {
+            color: #56b6c2;
+            margin-top: 5px;
+            display: block;
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+        .note {
+            background-color: rgba(250, 173, 20, 0.1);
+            border-left: 4px solid var(--warning-color);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 6px 6px 0;
+        }
+        .warning {
+            background-color: rgba(255, 77, 79, 0.1);
+            border-left: 4px solid var(--danger-color);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 6px 6px 0;
+        }
+        .success {
+            background-color: rgba(82, 196, 26, 0.1);
+            border-left: 4px solid var(--success-color);
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 6px 6px 0;
+        }
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .param-table th, .param-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .param-table th {
+            background-color: var(--light-bg);
+            font-weight: 600;
+        }
+        .param-table tr:hover {
+            background-color: var(--light-bg);
+        }
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            margin-top: 50px;
+            color: #777;
+            border-top: 1px solid var(--border-color);
+        }
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            h3 {
+                font-size: 1.2rem;
+            }
+            .container {
+                padding: 20px;
+            }
+            header {
+                padding: 40px 0 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>B站历史记录工具</h1>
+        <p>高效获取、处理和管理您的B站观看历史</p>
+    </header>
+
+    <div class="container">
+        <h2>项目介绍</h2>
+        <p>这是一个功能强大的B站历史记录管理工具，能够帮助您获取、处理和分析您的B站观看历史记录。工具支持视频、直播和专栏三种类型的历史记录，并提供去重、排序、筛选等多种数据处理功能。</p>
+    </div>
+
+    <div class="container">
+        <h2>功能说明</h2>
+        <div class="feature-card">
+            <h3>数据获取</h3>
+            <p>从B站API获取您的观看历史记录，包括视频、直播和专栏内容。支持分页获取和增量更新，避免重复获取已有的记录。</p>
+        </div>
+        <div class="feature-card">
+            <h3>数据处理</h3>
+            <p>提供多种数据处理功能，包括：</p>
+            <ul>
+                <li>移除重复的视频记录（基于BV号）</li>
+                <li>按观看时间排序记录</li>
+                <li>按内容类型筛选（视频、直播、专栏）</li>
+            </ul>
+        </div>
+        <div class="feature-card">
+            <h3>灵活配置</h3>
+            <p>通过命令行参数，您可以灵活选择需要执行的功能，如仅获取数据、仅处理数据或执行完整流程。</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>安装依赖</h2>
+        <p>在使用本工具前，请确保已安装以下依赖：</p>
+        <div class="code-block">
+            # 创建并激活虚拟环境（可选）
+            python -m venv .venv
+            .\.venv\Scripts\activate  # Windows
+            # source .venv/bin/activate  # macOS/Linux
+
+            # 安装依赖包
+            pip install requests tenacity
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>使用方法</h2>
+        <p>您可以通过命令行参数来控制工具的行为。基本用法如下：</p>
+        <div class="code-block">
+            python main.py [选项]
+        </div>
+
+        <h3>命令行参数</h3>
+        <table class="param-table">
+            <thead>
+                <tr>
+                    <th>参数</th>
+                    <th>描述</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--fetch</code></td>
+                    <td>仅获取历史记录，不进行处理</td>
+                </tr>
+                <tr>
+                    <td><code>--process</code></td>
+                    <td>仅处理CSV文件，不获取新记录</td>
+                </tr>
+                <tr>
+                    <td><code>--remove-duplicates</code></td>
+                    <td>移除重复的BV号记录（仅在<code>--process</code>模式下有效）</td>
+                </tr>
+                <tr>
+                    <td><code>--sort</code></td>
+                    <td>按观看时间排序记录（仅在<code>--process</code>模式下有效）</td>
+                </tr>
+                <tr>
+                    <td><code>--filter-type TYPE</code></td>
+                    <td>按内容类型筛选（TYPE可选值：video, live, article；仅在<code>--process</code>模式下有效）</td>
+                </tr>
+                <tr>
+                    <td><code>--csv-file FILE</code></td>
+                    <td>指定CSV文件路径（默认：bilibili_history.csv）</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>示例用法</h3>
+        <div class="command-example">
+            <span>python</span> <span>main.py</span>
+            <span class="description">执行完整流程：获取历史记录并处理（去重+排序）</span>
+        </div>
+
+        <div class="command-example">
+            <span>python</span> <span>main.py</span> <span class="option">--fetch</span>
+            <span class="description">仅获取历史记录，不进行处理</span>
+        </div>
+
+        <div class="command-example">
+            <span>python</span> <span>main.py</span> <span class="option">--process</span>
+            <span class="description">仅处理CSV文件（默认执行去重和排序）</span>
+        </div>
+
+        <div class="command-example">
+            <span>python</span> <span>main.py</span> <span class="option">--process --remove-duplicates --sort</span>
+            <span class="description">处理CSV文件，移除重复记录并排序</span>
+        </div>
+
+        <div class="command-example">
+            <span>python</span> <span>main.py</span> <span class="option">--process --filter-type video</span>
+            <span class="description">处理CSV文件，仅保留视频类型的记录</span>
+        </div>
+
+        <div class="command-example">
+            <span>python</span> <span>main.py</span> <span class="option">--csv-file my_history.csv</span>
+            <span class="description">使用指定的CSV文件路径</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>注意事项</h2>
+        <div class="note">
+            <p><strong>首次使用</strong>：请确保已在 <code>bilibili_history_fetcher.py</code> 中配置了正确的B站Cookie。</p>
+        </div>
+        <div class="warning">
+            <p><strong>API限制</strong>：为避免被B站API限制，请不要频繁执行获取操作。建议间隔至少1小时。</p>
+        </div>
+        <div class="note">
+            <p><strong>Cookie有效期</strong>：B站Cookie具有一定的有效期，过期后需要重新获取并更新配置。</p>
+        </div>
+        <div class="success">
+            <p><strong>增量更新</strong>：工具默认启用增量更新功能，只会获取新的历史记录，避免重复工作。</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>常见问题</h2>
+        <h3>如何获取B站Cookie？</h3>
+        <p>1. 打开浏览器，登录B站账号；</p>
+        <p>2. 按F12打开开发者工具；</p>
+        <p>3. 切换到Network选项卡；</p>
+        <p>4. 刷新页面，找到任意一个B站的请求；</p>
+        <p>5. 在Request Headers中找到Cookie字段，复制其值。</p>
+
+        <h3>为什么获取不到历史记录？</h3>
+        <p>可能的原因：</p>
+        <ul>
+            <li>Cookie无效或已过期，请重新获取并更新配置；</li>
+            <li>网络连接问题，请检查网络状况；</li>
+            <li>B站API限制，请稍后再试。</li>
+        </ul>
+    </div>
+
+    <footer>
+        <p>© 2023 B站历史记录工具 | 版本 1.0.0</p>
+    </footer>
+</body>
+</html>
