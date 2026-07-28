@@ -19,7 +19,7 @@ app.setStyleSheet(theme.GLOBAL_QSS)
 from gui.main_window import MainWindow
 from gui.activation_dialog import ActivationDialog
 from gui.settings_dialog import CookieSettingsDialog
-from gui.dialogs import TrialExhaustedDialog, FetchCompleteDialog
+from gui.dialogs import TrialExhaustedDialog, FetchCompleteDialog, AboutAuthorDialog
 
 out = os.path.join(root, "_shots")
 os.makedirs(out, exist_ok=True)
@@ -156,6 +156,7 @@ for name, dlg in [
     ("modal_complete", FetchCompleteDialog(w, added=12, total=345, pages=8,
                                            snapshot="backups/snapshot_20260727.csv",
                                            elapsed="01:23")),
+    ("modal_about_author", AboutAuthorDialog(w)),
 ]:
     dlg.show()
     dlg.adjustSize()

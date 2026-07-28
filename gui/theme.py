@@ -240,10 +240,22 @@ QLabel#NavBadge {{
     font-weight: 600;
     background: transparent;
 }}
-#VersionLabel {{
+:#VersionLabel {{
     color: {TEXT_DISABLED};
     font-size: 11px;
     background: transparent;
+}}
+#AboutAuthorBtn {{
+    color: {TEXT_3};
+    font-size: 11px;
+    background: transparent;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 6px;
+}}
+#AboutAuthorBtn:hover {{
+    color: {PINK};
+    background: {PINK_LIGHT};
 }}
 #UserRegTime {{
     font-size: 10px;

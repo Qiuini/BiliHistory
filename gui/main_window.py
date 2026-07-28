@@ -53,7 +53,7 @@ from gui.favorites_page import FavoritesPage
 from gui.workers import FetchWorker
 from gui.settings_dialog import CookieSettingsDialog
 from gui.activation_dialog import ActivationDialog
-from gui.dialogs import TrialExhaustedDialog, FetchCompleteDialog, FetchErrorDialog
+from gui.dialogs import TrialExhaustedDialog, FetchCompleteDialog, FetchErrorDialog, AboutAuthorDialog
 from gui.log_bridge import install_qt_log_handler
 
 from licensing import license_manager as lm
@@ -400,6 +400,13 @@ class MainWindow(QMainWindow):
         version.setObjectName("VersionLabel")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(version)
+
+        about_btn = QPushButton("关于作者")
+        about_btn.setObjectName("AboutAuthorBtn")
+        about_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        about_btn.setFixedHeight(28)
+        about_btn.clicked.connect(self._on_about_author)
+        lay.addWidget(about_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
         return sidebar
 
     # ---------------- 内容列 ----------------
@@ -538,6 +545,11 @@ class MainWindow(QMainWindow):
     def _on_placeholder(self):
         """占位按钮：记录即将推出的提示"""
         self._append_log("该功能即将推出，敬请期待", logging.INFO)
+
+    def _on_about_author(self):
+        """打开关于作者弹窗"""
+        dlg = AboutAuthorDialog(self)
+        dlg.exec()
 
     def _build_table_page(self) -> QWidget:
         page = QWidget()

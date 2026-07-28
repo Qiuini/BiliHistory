@@ -4,9 +4,11 @@
 - FetchCompleteDialog:  抓取完成统计弹窗（三统计卡 + 信息列表）
 - FetchErrorDialog:     抓取失败弹窗（Cookie失效 / 通用错误）
 """
+import webbrowser
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QLabel, QHBoxLayout, QVBoxLayout, QWidget, QGridLayout
+    QLabel, QHBoxLayout, QVBoxLayout, QWidget, QGridLayout, QPushButton
 )
 
 from gui.modal import ModalDialog, make_button, make_alert
@@ -209,3 +211,46 @@ class FetchErrorDialog(ModalDialog):
         btn_close.clicked.connect(self.reject)
         btn_action.clicked.connect(self.accept)
         self.add_footer([btn_close, btn_action], align="between")
+
+
+class AboutAuthorDialog(ModalDialog):
+    """关于作者弹窗：展示作者各平台主页链接"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent, width=400)
+        self.setWindowTitle("关于作者")
+        self.add_header("关于作者", icon="👤", icon_style="pink")
+        body = self.body_layout()
+
+        intro = QLabel("BiliHistory 由 Qiuini 开发与维护，欢迎通过以下平台联系与交流：")
+        intro.setObjectName("ResultDesc")
+        intro.setWordWrap(True)
+        intro.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        body.addWidget(intro)
+
+        links = [
+            ("知乎", "https://www.zhihu.com/people/qiuini"),
+            ("GitHub", "https://github.com/Qiuini"),
+            ("Bilibili", "https://space.bilibili.com/32210252"),
+        ]
+        for name, url in links:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            label = QLabel(f"{name}：")
+            label.setObjectName("InfoKey")
+            link = QLabel(f'<a href="{url}" style="color:#00AEEC;text-decoration:none;">{url}</a>')
+            link.setObjectName("InfoValue")
+            link.setOpenExternalLinks(True)
+            link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+            link.setWordWrap(True)
+            row.addWidget(label)
+            row.addWidget(link, stretch=1)
+            body.addLayout(row)
+
+        body.addWidget(make_alert(
+            "点击链接即可在浏览器中打开对应页面。",
+            "info"))
+
+        btn_ok = make_button("知道了", "primary")
+        btn_ok.clicked.connect(self.accept)
+        self.add_footer([btn_ok], align="center")
