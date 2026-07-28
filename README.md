@@ -231,11 +231,14 @@ python -m nuitka --standalone --onefile --windows-console-mode=disable \
   --enable-plugin=pyqt6 \
   --windows-icon-from-ico=favicon.ico \
   --include-data-files=favicon.ico=favicon.ico \
-  --include-data-files=src/config.json=config.json \
+  --include-data-files=src/config.json=src/config.json \
   --output-dir=dist \
   --output-filename=BiliHistory \
   gui_main.py
 ```
+
+> 注意：请使用完整安装的 CPython（如通过 python.org 或 Microsoft Store 安装的 Python），不要使用嵌入式/embeddable 发行版，否则 Nuitka 会报错。
+
 
 ### 使用 PyInstaller
 
