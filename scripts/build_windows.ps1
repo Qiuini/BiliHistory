@@ -49,7 +49,14 @@ if ($nsis) {
     Write-Host "==> Building installer with NSIS..."
     $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
     $icoNsis = $ico -replace '\\', '/'
-    & $nsis.FullName "/DICON_PATH=$icoNsis" packaging\installer.nsi
+    $exe = Resolve-Path (Join-Path $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
+    if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
+    $exeNsis = $exe -replace '\\', '/'
+    $outNsis = (($root -replace '\\', '/') + '/dist/BiliHistory-1.0.0-setup.exe')
+    Write-Host "Using icon: $icoNsis"
+    Write-Host "Using source exe: $exeNsis"
+    Write-Host "Using output file: $outNsis"
+    & $nsis.FullName "/DICON_PATH=$icoNsis" "/DSOURCE_EXE=$exeNsis" "/DOUT_FILE=$outNsis" packaging\installer.nsi
     $setup = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"

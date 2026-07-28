@@ -12,7 +12,7 @@ Unicode True
 SetCompressor /SOLID lzma
 
 Name "${APP_NAME_CN}"
-OutFile "dist\${APP_NAME}-${APP_VERSION}-setup.exe"
+OutFile "${OUT_FILE}"
 InstallDir "$PROGRAMFILES64\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallDir"
 RequestExecutionLevel admin
@@ -20,6 +20,16 @@ RequestExecutionLevel admin
 ; 图标路径：默认相对当前工作目录，可通过 /DICON_PATH=... 覆盖
 !ifndef ICON_PATH
   !define ICON_PATH "favicon.ico"
+!endif
+
+; 源 exe 路径：默认相对当前工作目录，可通过 /DSOURCE_EXE=... 覆盖
+!ifndef SOURCE_EXE
+  !define SOURCE_EXE "dist\BiliHistory.exe"
+!endif
+
+; 安装包输出路径：默认相对当前工作目录，可通过 /DOUT_FILE=... 覆盖
+!ifndef OUT_FILE
+  !define OUT_FILE "dist\BiliHistory-${APP_VERSION}-setup.exe"
 !endif
 
 ; 界面
@@ -42,8 +52,8 @@ RequestExecutionLevel admin
 
 Section "安装主程序" SecMain
     SetOutPath "$INSTDIR"
-    File "dist\BiliHistory.exe"
-    File "favicon.ico"
+    File "${SOURCE_EXE}"
+    File "${ICON_PATH}"
 
     ; 写入卸载程序
     WriteUninstaller "$INSTDIR\Uninstall.exe"

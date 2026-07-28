@@ -48,8 +48,15 @@ jobs:
           $ico = Resolve-Path favicon.ico | Select-Object -ExpandProperty Path
           if (-not (Test-Path $ico)) { throw "favicon.ico not found at $ico" }
           $icoNsis = $ico -replace '\\', '/'
+          $exe = Resolve-Path dist\BiliHistory.exe | Select-Object -ExpandProperty Path
+          if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
+          $exeNsis = $exe -replace '\\', '/'
+          $out = Resolve-Path dist | Select-Object -ExpandProperty Path
+          $outNsis = ($out -replace '\\', '/') + '/BiliHistory-1.0.0-setup.exe'
           Write-Host "Using icon: $icoNsis"
-          & $nsis.FullName "/DICON_PATH=$icoNsis" packaging\installer.nsi
+          Write-Host "Using source exe: $exeNsis"
+          Write-Host "Using output file: $outNsis"
+          & $nsis.FullName "/DICON_PATH=$icoNsis" "/DSOURCE_EXE=$exeNsis" "/DOUT_FILE=$outNsis" packaging\installer.nsi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
