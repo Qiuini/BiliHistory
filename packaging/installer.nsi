@@ -17,11 +17,16 @@ InstallDir "$PROGRAMFILES64\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallDir"
 RequestExecutionLevel admin
 
+; 图标路径：默认相对当前工作目录，可通过 /DICON_PATH=... 覆盖
+!ifndef ICON_PATH
+  !define ICON_PATH "favicon.ico"
+!endif
+
 ; 界面
 !include "MUI2.nsh"
 !define MUI_ABORTWARNING
-!define MUI_ICON "favicon.ico"
-!define MUI_UNICON "favicon.ico"
+!define MUI_ICON "${ICON_PATH}"
+!define MUI_UNICON "${ICON_PATH}"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY

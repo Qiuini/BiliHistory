@@ -47,7 +47,9 @@ $nsis = Get-ChildItem -Path "${env:ProgramFiles(x86)}\NSIS" -Filter makensis.exe
 if (-not $nsis) { $nsis = Get-Command makensis -ErrorAction SilentlyContinue }
 if ($nsis) {
     Write-Host "==> Building installer with NSIS..."
-    & $nsis.FullName packaging\installer.nsi
+    $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
+    $icoNsis = $ico -replace '\\', '/'
+    & $nsis.FullName "/DICON_PATH=$icoNsis" packaging\installer.nsi
     $setup = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"

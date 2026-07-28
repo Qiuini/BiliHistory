@@ -45,7 +45,11 @@ jobs:
           $nsis = Get-ChildItem -Path "${env:ProgramFiles(x86)}\NSIS" -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $nsis) { $nsis = Get-Command makensis -ErrorAction SilentlyContinue }
           if (-not $nsis) { throw "NSIS not found after installation" }
-          & $nsis.FullName packaging\installer.nsi
+          $ico = Resolve-Path favicon.ico | Select-Object -ExpandProperty Path
+          if (-not (Test-Path $ico)) { throw "favicon.ico not found at $ico" }
+          $icoNsis = $ico -replace '\\', '/'
+          Write-Host "Using icon: $icoNsis"
+          & $nsis.FullName "/DICON_PATH=$icoNsis" packaging\installer.nsi
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
