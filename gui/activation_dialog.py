@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 )
 
 from licensing import license_manager as lm
+from licensing import online_activation
 from licensing import trial
 
 from gui.modal import ModalDialog, make_button, make_alert
@@ -92,13 +93,27 @@ class ActivationDialog(ModalDialog):
         body.addWidget(mid_hint)
 
         # ---- 激活码输入 ----
-        code_label = QLabel("激活码")
+        code_label = QLabel("激活码 / 授权密钥")
         code_label.setObjectName("FormLabel")
         body.addWidget(code_label)
         self.code_edit = QLineEdit()
         self.code_edit.setObjectName("FormInput")
-        self.code_edit.setPlaceholderText("请输入激活码...")
+        self.code_edit.setPlaceholderText("请输入离线激活码或服务器授权密钥...")
         body.addWidget(self.code_edit)
+
+        server_label = QLabel("授权服务器地址（可选）")
+        server_label.setObjectName("FormLabel")
+        body.addWidget(server_label)
+        self.server_edit = QLineEdit()
+        self.server_edit.setObjectName("FormInput")
+        self.server_edit.setPlaceholderText("例如 http://127.0.0.1:8787")
+        body.addWidget(self.server_edit)
+
+        server_hint = QLabel("提示：输入服务器授权密钥（如 XXXX-XXXX-XXXX）并填写服务器地址，"
+                             "即可在线激活；离线激活码直接粘贴即可。")
+        server_hint.setObjectName("FormHint")
+        server_hint.setWordWrap(True)
+        body.addWidget(server_hint)
 
         # ---- 会员方案 ----
         plan_row = QHBoxLayout()
@@ -209,7 +224,21 @@ class ActivationDialog(ModalDialog):
         if not code:
             self.code_edit.setFocus()
             return
-        info = lm.activate(code)
+
+        # 包含点的字符串视为离线签名激活码；否则尝试服务器在线激活
+        if "." in code:
+            info = lm.activate(code)
+        else:
+            server_url = self.server_edit.text().strip()
+            if not server_url:
+                self.server_edit.setFocus()
+                return
+            signed_code = online_activation.activate_online(server_url, code)
+            if signed_code is None:
+                info = None
+            else:
+                info = lm.current_license()
+
         if info is None:
             dlg = ActivationFailedDialog(self)
             if dlg.exec():  # "重新输入"
