@@ -7,7 +7,7 @@
 #   dist/*.deb                    Debian 安装包（需 dpkg-deb）
 #   dist/*.AppImage               AppImage（需 appimagetool，可选）
 #
-# 注意：不能在 Windows 上交叉构建 Linux 包，请在 Linux 环境或 GitHub Actions 执行。
+# 注意：不能在 Windows 上交叉构建 Linux 包，请在 Linux 环境、WSL 或 GitHub Actions 执行。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,9 +16,13 @@ cd "$ROOT"
 PY="${PYTHON:-python3}"
 VERSION="1.0.0"
 APP="BiliHistory"
+APP_LOWER="${APP,,}"
 
 echo "==> 安装构建依赖"
-"$PY" -m pip install pyinstaller cryptography PyQt6 requests
+"$PY" -m pip install pyinstaller cryptography PyQt6 requests Pillow
+
+echo "==> 准备图标资源"
+"$PY" scripts/prepare_assets.py
 
 echo "==> PyInstaller 打包"
 "$PY" -m PyInstaller packaging/bilihistory.spec --noconfirm --clean
@@ -29,17 +33,17 @@ echo "==> 生成 tar.gz 便携包"
 # ---------------- .deb ----------------
 if command -v dpkg-deb >/dev/null 2>&1; then
   echo "==> 构建 .deb"
-  PKG="dist/deb/${APP,,}_${VERSION}_amd64"
+  PKG="dist/deb/${APP_LOWER}_${VERSION}_amd64"
   rm -rf "$PKG"
   mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications" "$PKG/usr/share/icons/hicolor/256x256/apps"
   sed "s/@VERSION@/${VERSION}/g" packaging/debian/control > "$PKG/DEBIAN/control"
-  install -m 0755 "dist/${APP}" "$PKG/usr/bin/${APP,,}"
-  sed "s/@APP@/${APP,,}/g" packaging/debian/bilihistory.desktop > "$PKG/usr/share/applications/${APP,,}.desktop"
+  install -m 0755 "dist/${APP}" "$PKG/usr/bin/${APP_LOWER}"
+  sed "s/@APP@/${APP_LOWER}/g" packaging/debian/bilihistory.desktop > "$PKG/usr/share/applications/${APP_LOWER}.desktop"
   if [ -f packaging/icon.png ]; then
-    cp packaging/icon.png "$PKG/usr/share/icons/hicolor/256x256/apps/${APP,,}.png"
+    cp packaging/icon.png "$PKG/usr/share/icons/hicolor/256x256/apps/${APP_LOWER}.png"
   fi
-  dpkg-deb --build --root-owner-group "$PKG" "dist/${APP,,}_${VERSION}_amd64.deb"
-  echo "    生成: dist/${APP,,}_${VERSION}_amd64.deb"
+  dpkg-deb --build --root-owner-group "$PKG" "dist/${APP_LOWER}_${VERSION}_amd64.deb"
+  echo "    生成: dist/${APP_LOWER}_${VERSION}_amd64.deb"
 else
   echo "!! 未检测到 dpkg-deb，跳过 .deb 构建"
 fi
@@ -50,10 +54,12 @@ if command -v appimagetool >/dev/null 2>&1; then
   APPDIR="dist/${APP}.AppDir"
   rm -rf "$APPDIR"
   mkdir -p "$APPDIR/usr/bin"
-  install -m 0755 "dist/${APP}" "$APPDIR/usr/bin/${APP,,}"
-  sed "s/@APP@/${APP,,}/g" packaging/debian/bilihistory.desktop > "$APPDIR/${APP,,}.desktop"
-  [ -f packaging/icon.png ] && cp packaging/icon.png "$APPDIR/${APP,,}.png"
-  printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/%s" "$@"\n' "${APP,,}" > "$APPDIR/AppRun"
+  install -m 0755 "dist/${APP}" "$APPDIR/usr/bin/${APP_LOWER}"
+  sed "s/@APP@/${APP_LOWER}/g" packaging/debian/bilihistory.desktop > "$APPDIR/${APP_LOWER}.desktop"
+  if [ -f packaging/icon.png ]; then
+    cp packaging/icon.png "$APPDIR/${APP_LOWER}.png"
+  fi
+  printf '#!/bin/sh\nexec "$(dirname "$0")/usr/bin/%s" "$@"\n' "${APP_LOWER}" > "$APPDIR/AppRun"
   chmod +x "$APPDIR/AppRun"
   appimagetool "$APPDIR" "dist/${APP}-x86_64.AppImage"
 else

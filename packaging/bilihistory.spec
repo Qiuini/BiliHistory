@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 
 ROOT = Path(os.getcwd())
-ICON = ROOT / "packaging" / "icon.ico"
+ICON = ROOT / "favicon.ico"
 VERSION_INFO = ROOT / "packaging" / "version_info.txt"
 
 datas = [

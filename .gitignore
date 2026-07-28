@@ -8,6 +8,10 @@ tools/private_key.pem
 build/
 dist/
 *.spec.bak
+nuitka-crash-report.xml
+*.onefile-build/
+*.dist/
+*.build/
 
 # 数据文件
 bilibili_history.csv

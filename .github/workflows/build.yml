@@ -1,0 +1,105 @@
+name: Build Releases
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests
+        run: python -m pytest -q
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka PyQt6 cryptography requests
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka --standalone --onefile --windows-console-mode=disable `
+            --enable-plugin=pyqt6 `
+            --windows-icon-from-ico=favicon.ico `
+            --include-data-files=favicon.ico=favicon.ico `
+            --include-data-files=src/config.json=src/config.json `
+            --output-dir=dist --output-filename=BiliHistory --jobs=4 gui_main.py
+        shell: pwsh
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliHistory-windows
+          path: dist/BiliHistory.exe
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+      - name: Install appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool
+          chmod +x /usr/local/bin/appimagetool
+      - name: Build Linux packages
+        run: bash scripts/build_linux.sh
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliHistory-linux
+          path: |
+            dist/BiliHistory
+            dist/BiliHistory-x86_64.tar.gz
+            dist/*.deb
+            dist/*.AppImage
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BiliHistory-windows
+          path: dist-windows
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: BiliHistory-linux
+          path: dist-linux
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-windows/BiliHistory.exe
+            dist-linux/*
+          generate_release_notes: true

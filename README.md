@@ -220,34 +220,57 @@ python -m pytest -q
 
 ## 打包发布
 
-### 使用 Nuitka（推荐）
+所有构建脚本位于 `scripts/`，产物输出到 `dist/`。
 
-```bash
-# 安装 Nuitka
-pip install nuitka
+### Windows（Nuitka 单文件 .exe）
 
-# 单文件 GUI 打包（包含图标与数据文件）
+```powershell
+# 方式一：一键脚本
+powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+
+# 方式二：手动命令
 python -m nuitka --standalone --onefile --windows-console-mode=disable \
   --enable-plugin=pyqt6 \
   --windows-icon-from-ico=favicon.ico \
   --include-data-files=favicon.ico=favicon.ico \
   --include-data-files=src/config.json=src/config.json \
-  --output-dir=dist \
-  --output-filename=BiliHistory \
-  gui_main.py
+  --output-dir=dist --output-filename=BiliHistory --jobs=4 gui_main.py
 ```
 
-> 注意：请使用完整安装的 CPython（如通过 python.org 或 Microsoft Store 安装的 Python），不要使用嵌入式/embeddable 发行版，否则 Nuitka 会报错。
+> 注意：请使用完整安装的 CPython（如 python.org 或 Microsoft Store 版本），不要使用嵌入式/embeddable 发行版，否则 Nuitka 会报错。
 
+### Linux（.deb / AppImage / tar.gz）
 
-### 使用 PyInstaller
+在 Debian/Ubuntu 或其他 Linux 发行版执行：
+
+```bash
+bash scripts/build_linux.sh
+```
+
+产物：
+
+| 文件 | 说明 |
+| --- | --- |
+| `dist/BiliHistory` | PyInstaller 单文件可执行 |
+| `dist/BiliHistory-x86_64.tar.gz` | 便携压缩包 |
+| `dist/bilihistory_1.0.0_amd64.deb` | Debian/Ubuntu 安装包 |
+| `dist/BiliHistory-x86_64.AppImage` | 通用 Linux 可执行（需 appimagetool） |
+
+构建依赖：`python3-dev`, `dpkg-dev`（deb 需要）, `appimagetool`（AppImage 需要）。
+
+### GitHub Actions 自动构建
+
+仓库已配置 `.github/workflows/build.yml`：
+
+- 每次 push / PR 自动跑测试。
+- 推送 `v*` 标签时自动构建 Windows `.exe`、Linux `.deb` / `.AppImage` / `.tar.gz`，并发布 Release。
+
+### 使用 PyInstaller（备用）
 
 ```bash
 pip install pyinstaller
 pyinstaller packaging/bilihistory.spec
 ```
-
-打包产物位于 `dist/` 目录。
 
 ---
 
