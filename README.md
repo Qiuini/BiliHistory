@@ -222,10 +222,10 @@ python -m pytest -q
 
 所有构建脚本位于 `scripts/`，产物输出到 `dist/`。
 
-### Windows（Nuitka 单文件 .exe）
+### Windows（Nuitka 单文件 .exe + NSIS 安装包）
 
 ```powershell
-# 方式一：一键脚本
+# 方式一：一键脚本（自动检测 NSIS，生成安装包）
 powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 
 # 方式二：手动命令
@@ -235,9 +235,21 @@ python -m nuitka --standalone --onefile --windows-console-mode=disable \
   --include-data-files=favicon.ico=favicon.ico \
   --include-data-files=src/config.json=src/config.json \
   --output-dir=dist --output-filename=BiliHistory --jobs=4 gui_main.py
+
+# 若已安装 NSIS，再构建安装包
+makensis packaging\installer.nsi
 ```
 
+产物：
+
+| 文件 | 说明 |
+| --- | --- |
+| `dist/BiliHistory.exe` | 便携单文件 |
+| `dist/BiliHistory-1.0.0-setup.exe` | Windows 安装包（写入 Program Files、开始菜单、桌面快捷方式） |
+
 > 注意：请使用完整安装的 CPython（如 python.org 或 Microsoft Store 版本），不要使用嵌入式/embeddable 发行版，否则 Nuitka 会报错。
+>
+> 安装包安装后，用户数据（Cookie、CSV、配置、授权文件）存放在 `%APPDATA%\BiliHistory`，与程序目录分离，方便修改和备份。
 
 ### Linux（.deb / AppImage / tar.gz）
 
@@ -257,6 +269,8 @@ bash scripts/build_linux.sh
 | `dist/BiliHistory-x86_64.AppImage` | 通用 Linux 可执行（需 appimagetool） |
 
 构建依赖：`python3-dev`, `dpkg-dev`（deb 需要）, `appimagetool`（AppImage 需要）。
+
+Linux 用户数据存放在 `~/.config/bili-history`。
 
 ### GitHub Actions 自动构建
 

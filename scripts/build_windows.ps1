@@ -46,3 +46,18 @@ Write-Host "==> 开始 Nuitka 单文件打包..."
 
 $artifact = Join-Path $root 'dist' 'BiliHistory.exe'
 Write-Host "==> 完成。产物: $artifact"
+
+# 若系统已安装 NSIS，则额外构建安装包
+$makensis = Get-Command makensis -ErrorAction SilentlyContinue
+if ($makensis) {
+    Write-Host "==> 检测到 NSIS，构建安装程序..."
+    & $makensis.Source packaging\installer.nsi
+    $setup = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
+    if (Test-Path $setup) {
+        Write-Host "==> 安装包: $setup"
+    } else {
+        Write-Warning "安装包未生成，请检查 NSIS 输出"
+    }
+} else {
+    Write-Host "!! 未检测到 NSIS，跳过安装包构建。如需安装包请先安装 NSIS: https://nsis.sourceforge.io"
+}

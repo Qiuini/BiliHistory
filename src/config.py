@@ -19,16 +19,37 @@ class ConfigLoader:
     ENV_PREFIX = "BILI_"
 
     def __init__(self, config_path: Optional[str] = None):
-        self.config_path = config_path or self._get_default_config_path()
+        self.config_path = Path(config_path) if config_path else self._get_default_config_path()
+        self.bundled_config_path = self._get_bundled_config_path()
         self.secrets_path = self._get_default_secrets_path()
+        self._ensure_user_config()
 
-    def _get_default_config_path(self) -> str:
-        """获取默认配置文件路径"""
+    def _get_default_config_path(self) -> Path:
+        """获取用户可写的默认配置文件路径（优先使用）"""
+        return paths.app_data_dir() / "config.json"
+
+    def _get_bundled_config_path(self) -> Path:
+        """获取程序内置的默认配置文件路径（作为模板）"""
         return Path(__file__).parent / "config.json"
 
     def _get_default_secrets_path(self) -> Path:
         """获取默认敏感信息文件路径（用户数据目录，可写且不随程序目录）"""
         return paths.secrets_file()
+
+    def _ensure_user_config(self) -> None:
+        """若用户配置文件不存在，则从程序内置模板复制一份"""
+        if self.config_path.is_file():
+            return
+        if self.bundled_config_path.is_file():
+            try:
+                self.config_path.parent.mkdir(parents=True, exist_ok=True)
+                self.config_path.write_text(
+                    self.bundled_config_path.read_text(encoding='utf-8'),
+                    encoding='utf-8'
+                )
+                logger.info(f"已创建用户配置文件: {self.config_path}")
+            except Exception as e:
+                logger.warning(f"复制配置文件失败: {e}")
 
     def load(self) -> HistoryConfig:
         """加载配置"""
