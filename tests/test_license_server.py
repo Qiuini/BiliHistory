@@ -42,11 +42,13 @@ def running_server(signing_key, tmp_path):
     admin_key = "test-admin-key-123"
     db_path = tmp_path / "licenses_test.db"
     store = license_server.LicenseStore(str(db_path))
+    rate_limiter = license_server.RateLimiter(window=60, max_calls=100)
     class Handler(license_server._Handler):
         pass
 
     Handler.store = store
     Handler.admin_key = admin_key
+    Handler.rate_limiter = rate_limiter
 
     server = HTTPServer(("127.0.0.1", 0), Handler)
     port = server.server_address[1]
@@ -154,3 +156,41 @@ def test_admin_unauthorized(running_server):
         timeout=5,
     )
     assert resp.status_code == 401
+
+
+def test_rate_limit(signing_key, tmp_path):
+    """激活接口限速测试"""
+    db_path = tmp_path / "licenses_rate_limit.db"
+    store = license_server.LicenseStore(str(db_path))
+    rate_limiter = license_server.RateLimiter(window=60, max_calls=2)
+
+    class Handler(license_server._Handler):
+        pass
+
+    Handler.store = store
+    Handler.admin_key = "admin"
+    Handler.rate_limiter = rate_limiter
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    url = f"http://127.0.0.1:{port}"
+    try:
+        # 签发一个 key
+        r = requests.post(
+            f"{url}/admin/issue",
+            headers={"X-Admin-Key": "admin"},
+            json={"type": "buyout", "count": 1},
+            timeout=5,
+        )
+        key = r.json()["keys"][0]
+
+        # 第 1、2 次通过限速器（第 2 次因 key 无效返回 403 也算一次请求）
+        assert requests.post(f"{url}/api/activate", json={"license_key": key, "machine_id": "m1"}, timeout=5).status_code == 200
+        assert requests.post(f"{url}/api/activate", json={"license_key": "BAD-KEY-1234", "machine_id": "m2"}, timeout=5).status_code == 403
+        # 第 3 次应被限流
+        assert requests.post(f"{url}/api/activate", json={"license_key": key, "machine_id": "m3"}, timeout=5).status_code == 429
+    finally:
+        server.shutdown()

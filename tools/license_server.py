@@ -45,6 +45,10 @@ from urllib.parse import urlparse
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+# 激活接口限速：同一 IP 在窗口期内最多允许的次数
+RATE_LIMIT_WINDOW = int(os.environ.get("LICENSE_RATE_WINDOW", "300"))  # 5 分钟
+RATE_LIMIT_MAX = int(os.environ.get("LICENSE_RATE_MAX", "20"))         # 最多 20 次
+
 PRIVATE_KEY_PATH = Path(__file__).parent / "private_key.pem"
 _PRIVATE_KEY: Ed25519PrivateKey | None = None
 
@@ -81,6 +85,27 @@ def _sign_payload(payload: dict) -> str:
 def _new_license_key() -> str:
     """生成形如 xxxx-xxxx-xxxx 的激活码"""
     return "-".join(secrets.token_hex(2).upper() for _ in range(3))
+
+
+class RateLimiter:
+    """简单内存式滑动窗口限速器（单进程场景够用）"""
+
+    def __init__(self, window: int, max_calls: int):
+        self.window = window
+        self.max_calls = max_calls
+        self._records: dict[str, list[float]] = {}
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        cutoff = now - self.window
+        timestamps = self._records.get(key, [])
+        timestamps = [t for t in timestamps if t > cutoff]
+        if len(timestamps) >= self.max_calls:
+            self._records[key] = timestamps
+            return False
+        timestamps.append(now)
+        self._records[key] = timestamps
+        return True
 
 
 class LicenseStore:
@@ -196,6 +221,7 @@ class LicenseStore:
 class _Handler(BaseHTTPRequestHandler):
     store: LicenseStore
     admin_key: str
+    rate_limiter: RateLimiter
 
     def log_message(self, fmt, *args):
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {self.client_address[0]} {fmt % args}")
@@ -233,12 +259,16 @@ class _Handler(BaseHTTPRequestHandler):
         data = self._read_json()
 
         if path == "/api/activate":
+            client_ip = self._client_ip()
+            if not self.rate_limiter.is_allowed(client_ip):
+                self._send_json(429, {"success": False, "error": "RATE_LIMITED"})
+                return
             key = str(data.get("license_key", "")).strip()
             machine_id = str(data.get("machine_id", "")).strip()
             if not key or not machine_id:
                 self._send_json(400, {"success": False, "error": "MISSING_PARAMS"})
                 return
-            ok, result = self.store.activate(key, machine_id, self._client_ip())
+            ok, result = self.store.activate(key, machine_id, client_ip)
             if not ok:
                 self._send_json(403, {"success": False, "error": result})
                 return
@@ -291,18 +321,23 @@ def main():
 
     admin_key = os.environ.get("LICENSE_ADMIN_KEY")
     if not admin_key:
-        admin_key = secrets.token_urlsafe(24)
-        print(f"[提示] 未设置 LICENSE_ADMIN_KEY，已生成临时管理密钥：{admin_key}")
+        raise SystemExit(
+            "错误：未设置 LICENSE_ADMIN_KEY 环境变量。\n"
+            "生产环境必须显式设置管理密钥，例如：\n"
+            "  LICENSE_ADMIN_KEY=your-secret-key python tools/license_server.py"
+        )
 
     store = LicenseStore(args.db)
+    rate_limiter = RateLimiter(window=RATE_LIMIT_WINDOW, max_calls=RATE_LIMIT_MAX)
 
     class Handler(_Handler):
         store = store
         admin_key = admin_key
+        rate_limiter = rate_limiter
 
     server = HTTPServer((args.host, args.port), Handler)
     print(f"[启动] 授权服务器运行在 http://{args.host}:{args.port}")
-    print(f"[管理] X-Admin-Key: {admin_key}")
+    print(f"[限速] /api/activate 每 IP {RATE_LIMIT_MAX} 次 / {RATE_LIMIT_WINDOW} 秒")
     print(f"[数据] SQLite: {args.db}")
     try:
         server.serve_forever()

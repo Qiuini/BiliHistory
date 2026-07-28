@@ -14,8 +14,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PY="${PYTHON:-python3}"
-VERSION="1.0.0"
+VERSION="$($PY -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)" 2>/dev/null || echo "1.0.0")"
 APP="BiliHistory"
+
+echo "==> 构建版本: $VERSION"
 APP_LOWER="${APP,,}"
 
 echo "==> 安装构建依赖"

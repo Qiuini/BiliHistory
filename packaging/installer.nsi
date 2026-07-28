@@ -4,9 +4,13 @@
 
 !define APP_NAME "BiliHistory"
 !define APP_NAME_CN "BiliHistory - B站历史记录管理工具"
-!define APP_VERSION "1.0.0"
 !define PUBLISHER "Qiuini"
 !define APP_URL "https://github.com/Qiuini/BiliHistory"
+
+; 版本号：可通过 /DAPP_VERSION=1.0.0 覆盖
+!ifndef APP_VERSION
+  !define APP_VERSION "1.0.0"
+!endif
 
 Unicode True
 SetCompressor /SOLID lzma

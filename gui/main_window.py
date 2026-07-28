@@ -58,6 +58,7 @@ from gui.log_bridge import install_qt_log_handler
 
 from licensing import license_manager as lm
 from licensing import trial
+from version import display_version
 
 # 界面筛选下拉项 -> 类型英文值（与 to_dict 中存储的 '类型' 一致）
 _FILTER_MAP = {
@@ -396,7 +397,7 @@ class MainWindow(QMainWindow):
         card_lay.addLayout(user_col, stretch=1)
         lay.addWidget(card)
 
-        version = QLabel("BiliHistory v1.0")
+        version = QLabel(display_version())
         version.setObjectName("VersionLabel")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(version)

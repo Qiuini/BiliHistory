@@ -33,6 +33,12 @@ if (-not $py) {
 }
 
 Write-Host "==> Using interpreter: $py"
+
+# 从 Python 读取统一版本号
+$version = & $py -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)" 2>$null
+if (-not $version) { $version = "1.0.0" }
+Write-Host "==> Building version: $version"
+
 Write-Host "==> Installing build dependencies..."
 & $py -m pip install pyinstaller PyQt6 cryptography requests Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
 
@@ -51,12 +57,12 @@ if ($nsis) {
     $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
     $exe = Resolve-Path (Join-Path $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
     if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-    $out = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
+    $out = Join-Path $root 'dist' "BiliHistory-${version}-setup.exe"
     Write-Host "Using icon: $ico"
     Write-Host "Using source exe: $exe"
     Write-Host "Using output file: $out"
-    & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" packaging\installer.nsi
-    $setup = Join-Path $root 'dist' 'BiliHistory-1.0.0-setup.exe'
+    & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" "/DAPP_VERSION=$version" packaging\installer.nsi
+    $setup = Join-Path $root 'dist' "BiliHistory-${version}-setup.exe"
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"
     } else {

@@ -9,6 +9,7 @@ from typing import Optional
 from models import HistoryConfig
 from exceptions import ConfigError
 from logger import logger
+from secrets_store import SecretsStore
 import paths
 
 
@@ -68,18 +69,12 @@ class ConfigLoader:
             raise ConfigError(f"配置文件格式错误: {e}")
 
     def _load_cookie(self) -> str:
-        """加载 Cookie，优先级: 环境变量 > .secrets.json"""
+        """加载 Cookie，优先级: 环境变量 > 加密 .secrets.json"""
         cookie = os.environ.get(f"{self.ENV_PREFIX}COOKIE", "")
         if cookie:
             return cookie
 
-        try:
-            with open(self.secrets_path, 'r', encoding='utf-8') as f:
-                return json.load(f).get('cookie', '')
-        except FileNotFoundError:
-            return ''
-        except json.JSONDecodeError as e:
-            raise ConfigError(f"敏感信息文件格式错误 ({self.secrets_path}): {e}")
+        return SecretsStore(self.secrets_path).get("cookie", "")
 
     def _build_config(self, config_dict: dict) -> HistoryConfig:
         """构建配置对象"""
@@ -151,21 +146,13 @@ def reload_config(config_path: Optional[str] = None) -> HistoryConfig:
 
 
 def save_cookie(cookie: str) -> HistoryConfig:
-    """保存 Cookie 到 .secrets.json 并刷新全局配置（供 GUI 设置对话框调用）"""
+    """保存 Cookie 到加密的 .secrets.json 并刷新全局配置（供 GUI 设置对话框调用）"""
     loader = ConfigLoader()
-    secrets_path = loader.secrets_path
+    store = SecretsStore(loader.secrets_path)
 
-    data = {}
-    if Path(secrets_path).is_file():
-        try:
-            with open(secrets_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
-
+    data = store.load()
     data['cookie'] = cookie.strip()
-    with open(secrets_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    store.save(data)
 
-    logger.info("Cookie 已保存到 .secrets.json")
+    logger.info("Cookie 已加密保存到 .secrets.json")
     return reload_config()
