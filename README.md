@@ -1,7 +1,8 @@
 # BiliHistory —— B站历史记录管理工具
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![PyQt6](https://img.shields.io/badge/GUI-PyQt6-green)](https://www.riverbankcomputing.com/software/pyqt/)
+[![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://isocpp.org/)
+[![Qt6](https://img.shields.io/badge/GUI-Qt6_Widgets-green)](https://www.qt.io/)
+[![CMake](https://img.shields.io/badge/Build-CMake-orange)](https://cmake.org/)
 [![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
 
 > 把你的 B 站观看历史、关注列表、收藏夹永久保存在自己电脑里的桌面工具。
@@ -17,7 +18,7 @@ BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管�
 - **数据本地化**：所有数据 100% 存储在本地，避免云端历史滚动丢失。
 - **增量抓取**：每次抓取自动生成时间戳快照，再增量合并到总表，只增不删。
 - **免费试用**：新用户首次使用起 30 天免费试用，到期后需激活会员。
-- **轻量桌面端**：单窗口 PyQt6 应用，支持自由缩放，界面遵循 B站粉 + B站蓝品牌色。
+- **轻量桌面端**：单窗口 Qt6 Widgets 应用，支持自由缩放，界面遵循 B站粉 + B站蓝品牌色。
 
 ---
 
@@ -74,12 +75,14 @@ BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管�
 
 ## 技术栈
 
-- **Python** 3.10+
-- **PyQt6** —— 跨平台桌面 GUI
-- **requests** —— HTTP 请求
-- **cryptography** —— 授权码校验
-- **pytest** —— 单元测试
-- **Nuitka** / PyInstaller —— 打包发布
+- **C++17**
+- **Qt6 Widgets** —— 跨平台桌面 GUI
+- **Qt6 Network** —— HTTP 请求与网络层
+- **OpenSSL 3.x** —— 授权加密与密钥管理
+- **GoogleTest** —— 单元测试
+- **CMake 3.21+** —— 构建系统
+- **vcpkg** —— 依赖管理
+- **CPack** —— Windows NSIS / Linux DEB+RPM+TGZ 打包
 
 ---
 
@@ -87,52 +90,60 @@ BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管�
 
 ```text
 HistoryofBilibili/
-├── gui/                      # PyQt6 界面层
-│   ├── main_window.py        # 主窗口
-│   ├── table_model.py        # 表格数据模型
-│   ├── delegates.py          # 表格自定义绘制
-│   ├── theme.py              # QSS 主题
-│   ├── stats_page.py         # 数据统计页
-│   ├── following_page.py     # 关注列表页
-│   ├── favorites_page.py     # 收藏夹页
-│   ├── workers.py            # 后台抓取线程
-│   ├── dialogs.py            # 弹窗
-│   ├── settings_dialog.py    # Cookie 设置弹窗
-│   ├── activation_dialog.py  # 激活对话框
-│   └── log_bridge.py         # 日志桥接
-├── src/                      # 业务核心
-│   ├── config.py             # 配置管理
-│   ├── config.json           # 默认配置
-│   ├── fetcher.py            # 历史记录获取器
-│   ├── social_fetcher.py     # 关注/收藏/用户信息获取器
-│   ├── parser.py             # API 响应解析器
-│   ├── storage.py            # CSV 存储
-│   ├── models.py             # 数据模型
-│   ├── analytics.py          # 本地统计
-│   ├── licensing/            # 授权与试用
-│   ├── logger.py             # 日志
-│   ├── paths.py              # 路径管理
-│   └── exceptions.py         # 异常定义
-├── tests/                    # 单元测试
-├── packaging/                # 打包配置
-├── scripts/                  # 构建脚本
+├── src/                      # C++17 + Qt6 完整实现
+│   ├── core/                 # 核心层：配置、数据模型、CSV 存储、解析、日志、路径
+│   ├── network/              # 网络层：HTTP 客户端、API 客户端、数据抓取器
+│   ├── business/             # 业务层：抓取工作线程、统计分析、导出、更新检查
+│   ├── licensing/            # 授权层：试用、激活、机器码、加密
+│   ├── gui/                  # 表示层：主窗口、表格模型、各页面、弹窗、主题
+│   └── main.cpp              # 程序入口
+├── tests/                    # 单元测试（按模块对应 src/）
+├── tools/                    # 开发者工具：密钥生成、激活码签发
+├── cmake/                    # CMake 辅助脚本
+├── CMakeLists.txt            # 主构建配置
+├── vcpkg.json                # vcpkg manifest
 ├── BiliHistory-UI/           # 高保真原型与设计规范
 ├── docs/                     # 产品文档
-├── main.py                   # 命令行入口
-├── gui_main.py               # GUI 入口
-├── requirements.txt          # 依赖
+├── _shots/                   # 界面截图
+├── .github/workflows/        # CI/CD：构建、测试、发布
+├── .secrets.example.json     # Cookie 配置示例
+├── favicon.ico               # 应用图标
+├── index.html                # GitHub Pages 入口
+├── docs.html                 # 在线文档页
+├── LICENSE                   # MIT License
 └── README.md                 # 本文件
+```
+
+### 分层架构
+
+```
+┌─────────────────────────────────────┐
+│  GUI（Qt6 Widgets）                  │
+│  主窗口 / 页面 / 表格模型 / 弹窗      │
+├─────────────────────────────────────┤
+│  Business（业务编排）                │
+│  抓取工作线程 / 统计 / 导出 / 更新    │
+├─────────────────────────────────────┤
+│  Network（网络访问）                 │
+│  HTTP 客户端 / API 封装 / 数据抓取器  │
+├─────────────────────────────────────┤
+│  Core（领域与持久化）                │
+│  模型 / CSV 存储 / 解析 / 配置 / 日志 │
+├─────────────────────────────────────┤
+│  Licensing（授权与安全）             │
+│  试用 / 激活 / 机器码 / OpenSSL 加密  │
+└─────────────────────────────────────┘
 ```
 
 ---
 
-## 安装与运行
+## 构建
 
 ### 环境要求
 
-- Python 3.10 或更高版本
-- Windows 10/11 x64
-- Linux amd64 / arm64（提供 12 种发行版格式）
+- CMake 3.21+
+- C++17 编译器（MSVC / GCC / Clang）
+- [vcpkg](https://vcpkg.io/)（manifest 模式，自动安装 Qt6、OpenSSL、GTest）
 
 ### 1. 克隆项目
 
@@ -141,21 +152,65 @@ git clone <仓库地址>
 cd HistoryofBilibili
 ```
 
-### 2. 创建虚拟环境
+### 2. 配置并构建
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Linux/macOS
+**Windows (x64)**
+
+```powershell
+cmake -B build -S . `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build -j4 --config Release
 ```
 
-### 3. 安装依赖
+**Linux (amd64 / arm64)**
 
 ```bash
-pip install -r requirements.txt
+export VCPKG_DEFAULT_TRIPLET=x64-linux  # arm64 使用 arm64-linux
+cmake -B build -S . \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DCMAKE_BUILD_TYPE=Release
+
+cmake --build build -j4
 ```
 
-### 4. 配置 Cookie
+### 3. 测试
+
+**Windows**
+
+```powershell
+ctest --test-dir build -j4 --output-on-failure
+```
+
+**Linux（需要 offscreen 平台）**
+
+```bash
+sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0
+QT_QPA_PLATFORM=offscreen ctest --test-dir build -j4 --output-on-failure
+```
+
+### 4. 打包
+
+**Windows**
+
+```powershell
+cd build
+cpack -G "NSIS;ZIP"
+# 产物：BiliHistory-<version>-x64-setup.exe、BiliHistory-<version>-x64.zip
+```
+
+**Linux**
+
+```bash
+cd build
+cpack -G "DEB;RPM;TGZ"
+# 产物：bilihistory_<version>_<arch>.deb、bilihistory-<version>-1.<arch>.rpm、BiliHistory-<version>-<arch>.tar.gz
+```
+
+---
+
+## 配置 Cookie
 
 Cookie 用于抓取用户私有数据（历史记录、关注、收藏）。支持两种方式（优先级从高到低）：
 
@@ -181,115 +236,29 @@ set BILI_COOKIE=SESSDATA=xxx;DedeUserID=xxx
 
 ## 使用方式
 
-### 启动 GUI（推荐）
+启动构建产物中的桌面程序：
 
 ```bash
-python gui_main.py
-```
+# Windows
+build/bin/BiliHistory.exe
 
-### 命令行模式
-
-```bash
-# 完整流程：抓取 + 处理
-python main.py
-
-# 仅获取历史记录
-python main.py --fetch
-
-# 仅处理 CSV 文件
-python main.py --process
-
-# 去重 + 排序
-python main.py --process --remove-dup --sort
-
-# 按类型筛选
-python main.py --process --filter-type video
-
-# 指定 CSV 文件
-python main.py --csv-file path/to/history.csv
+# Linux
+build/bin/BiliHistory
 ```
 
 ---
 
-## 测试
-
-```bash
-python -m pytest -q
-```
-
----
-
-## 打包发布
-
-所有构建脚本位于 `scripts/`，产物输出到 `dist/`。
-
-### Windows（PyInstaller 单文件 .exe + NSIS 安装包）
-
-```powershell
-# 一键脚本（自动检测 NSIS，生成安装包）
-powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Arch x64
-```
-
-产物：
-
-| 文件 | 说明 |
-| --- | --- |
-| `dist/BiliHistory-x64.exe` | 便携单文件 |
-| `dist/BiliHistory-<version>-x64-setup.exe` | Windows 安装包（写入 Program Files、开始菜单、桌面快捷方式） |
-
-> 注意：请使用完整安装的 CPython（如 python.org 或 Microsoft Store 版本），不要使用嵌入式/embeddable 发行版，否则 PyInstaller/Nuitka 会报错。
->
-> Windows x86（32 位）暂不支持，因为 PyQt6 官方未提供 win32 wheel。
->
-> 安装包安装后，用户数据（Cookie、CSV、配置、授权文件）存放在 `%APPDATA%\BiliHistory`，与程序目录分离，方便修改和备份。
-
-### Linux（12 种发行版格式）
-
-在 Debian/Ubuntu 或其他 Linux 发行版执行：
-
-```bash
-bash scripts/build_linux.sh [amd64|arm64]
-```
-
-产物：
-
-| 文件 | 说明 | 适用发行版 |
-| --- | --- | --- |
-| `dist/BiliHistory-<arch>` | PyInstaller 单文件可执行 | 通用 |
-| `dist/BiliHistory-<arch>.tar.gz` | gzip 便携压缩包 | 通用 |
-| `dist/BiliHistory-<arch>.tar.bz2` | bzip2 便携压缩包 | 通用 |
-| `dist/BiliHistory-<arch>.tar.xz` | xz 便携压缩包 | 通用 |
-| `dist/BiliHistory-<arch>.zip` | zip 便携压缩包 | 通用 |
-| `dist/bilihistory_<version>_<arch>.deb` | Debian/Ubuntu 安装包 | Debian、Ubuntu、Deepin |
-| `dist/bilihistory-<version>-1.<arch>.rpm` | RPM 安装包 | Fedora、openSUSE、RHEL |
-| `dist/bilihistory-<version>-1-<arch>.pkg.tar.zst` | pacman 安装包 | Arch Linux、Manjaro |
-| `dist/bilihistory-<version>-<arch>.apk` | Alpine 安装包 | Alpine Linux |
-| `dist/bilihistory-<version>-<arch>.txz` | Slackware 安装包 | Slackware、Salix |
-| `dist/bilihistory-<version>-<arch>.sh` | 自解压 shell 安装包 | 通用 |
-| `dist/bilihistory-<version>.ebuild` | Gentoo ebuild 模板 | Gentoo |
-| `dist/BiliHistory-<arch>.AppImage` | 通用 Linux 可执行（需 appimagetool） | 通用 |
-
-构建依赖（按需安装）：`python3-dev`, `dpkg-dev`, `ruby-dev`, `build-essential`, `libarchive-tools`, `rpm`, `zip`, `zstd`；`appimagetool`（AppImage 需要）。fpm 会自动生成 deb/rpm/pacman/apk/sh/txz。
-
-> Linux i386 / armhf 暂不支持，因为 PyQt6 官方未提供对应 wheel。
-
-Linux 用户数据存放在 `~/.config/bili-history`。
-
-### GitHub Actions 自动构建
+## CI / CD
 
 仓库已配置 `.github/workflows/build.yml`：
 
-- 每次 push / PR 自动跑测试。
-- 推送 `v*` 标签时自动构建 Windows `.exe`、Linux 12 种发行版格式，并发布 Release。
+- 每次 push / PR 到 `main`/`master` 自动在 Ubuntu 上跑测试（Qt offscreen）。
+- 推送 `v*` 标签时自动构建：
+  - Windows x64：`.exe` + NSIS 安装包 + `.zip`
+  - Linux amd64 / arm64：`.deb`、`.rpm`、`.tar.gz`
+- 所有产物自动发布到 GitHub Release。
 
 最新 Release 下载：[https://github.com/Qiuini/BiliHistory/releases/latest](https://github.com/Qiuini/BiliHistory/releases/latest)
-
-### 使用 PyInstaller（备用）
-
-```bash
-pip install pyinstaller
-pyinstaller packaging/bilihistory.spec
-```
 
 ---
 

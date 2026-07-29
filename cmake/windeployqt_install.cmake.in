@@ -1,0 +1,27 @@
+# 由 CMakeLists.txt 生成，用于 CPack 安装阶段部署 Qt/OpenSSL 依赖
+set(WINDEPLOYQT_EXECUTABLE "@WINDEPLOYQT_EXECUTABLE@")
+set(INSTALL_DIR "${CMAKE_INSTALL_PREFIX}")
+set(EXECUTABLE "@BILIHISTORY_EXECUTABLE@")
+set(OPENSSL_DLLS "@OPENSSL_DLLS@")
+
+if(WINDEPLOYQT_EXECUTABLE)
+    execute_process(
+        COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-compiler-runtime --no-translations --dir "${INSTALL_DIR}" "${EXECUTABLE}"
+        RESULT_VARIABLE _wdq_result
+        OUTPUT_VARIABLE _wdq_output
+        ERROR_VARIABLE _wdq_error
+    )
+    if(NOT _wdq_result EQUAL 0)
+        message(WARNING "windeployqt failed during packaging: ${_wdq_error}")
+    endif()
+endif()
+
+foreach(dll ${OPENSSL_DLLS})
+    if(EXISTS "${dll}")
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${dll}" "${INSTALL_DIR}"
+        )
+    else()
+        message(WARNING "OpenSSL DLL not found during packaging: ${dll}")
+    endif()
+endforeach()

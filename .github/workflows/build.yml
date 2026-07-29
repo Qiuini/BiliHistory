@@ -1,128 +1,189 @@
-name: Build Releases
+name: Build and Release (C++)
 
 on:
   push:
-    branches: [master, main]
+    branches: [main, master]
     tags: ['v*']
   pull_request:
-    branches: [master, main]
+    branches: [main, master]
   workflow_dispatch:
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     env:
       QT_QPA_PLATFORM: offscreen
+      VCPKG_DEFAULT_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1
-      - name: Install dependencies
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run tests
-        run: python -m pytest -q
+          cmake -B build -S . \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j4
+
+      - name: Test
+        run: ctest --test-dir build -j4 --output-on-failure
 
   build-windows:
     needs: test
+    if: |
+      always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      github.event_name != 'pull_request'
     runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
         with:
-          python-version: '3.12'
-          architecture: x64
-      - name: Read app version
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake `
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j4 --config Release
+
+      - name: Package
+        run: |
+          cd build
+          cpack -G "NSIS;ZIP"
+
+      - name: Read version
         id: version
         shell: pwsh
         run: |
-          $ver = python -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)"
-          echo "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
-      - name: Install NSIS
-        run: choco install nsis -y
-      - name: Build portable + installer
+          $content = Get-Content -Raw -Path CMakeLists.txt
+          if ($content -match 'project\(BiliHistory VERSION (\d+\.\d+\.\d+)') {
+            $ver = $Matches[1]
+          } else {
+            $ver = '1.0.0'
+          }
+          "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Verify package contents
         shell: pwsh
         run: |
-          & scripts/build_windows.ps1 -Arch x64
+          $zip = "build/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64.zip"
+          if (-not (Test-Path $zip)) { throw "ZIP package not found: $zip" }
+          $required = @('BiliHistory.exe', 'Qt6Core.dll', 'libcrypto-3-x64.dll')
+          foreach ($item in $required) {
+            $found = & { try { (Expand-Archive -Path $zip -DestinationPath "_verify_zip" -Force) | Out-Null; Test-Path "_verify_zip/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64/$item" } catch { $false } }
+            if (-not $found) { throw "Missing $item in ZIP package" }
+          }
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BiliHistory-windows-x64
           path: |
-            dist/BiliHistory-x64.exe
-            dist/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64-setup.exe
+            build/bin/BiliHistory.exe
+            build/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64-setup.exe
+            build/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64.zip
 
   build-linux:
     needs: test
+    if: |
+      always() &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: amd64
             runner: ubuntu-latest
-            image: ''
-            platform: ''
+            triplet: x64-linux
           - arch: arm64
-            runner: ubuntu-latest
-            image: arm64v8/python:3.12-bookworm
-            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            triplet: arm64-linux
     runs-on: ${{ matrix.runner }}
+    env:
+      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install fpm (native)
-        if: matrix.platform == ''
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential libarchive-tools rpm zip zstd
-          sudo gem install --no-document fpm
-      - name: Set up QEMU
-        if: matrix.platform != ''
-        uses: docker/setup-qemu-action@v3
+          sudo apt-get install -y build-essential ninja-build cmake libegl1 libgl1 libxkbcommon-x11-0 libxkbcommon0 rpm dpkg-dev
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
         with:
-          platforms: ${{ matrix.platform }}
-      - name: Build native ${{ matrix.arch }}
-        if: matrix.platform == ''
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: bash scripts/build_linux.sh
-      - name: Build in container ${{ matrix.arch }}
-        if: matrix.platform != ''
-        env:
-          ARCH: ${{ matrix.arch }}
+          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure
         run: |
-          docker run --rm \
-            --platform ${{ matrix.platform }} \
-            -v "$(pwd):/workspace" \
-            -w /workspace \
-            -e ARCH=${{ matrix.arch }} \
-            ${{ matrix.image }} \
-            bash -c "
-              apt-get update && \
-              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential libarchive-tools rpm zip zstd && \\
-              gem install --no-document fpm && \
-              bash scripts/build_linux.sh
-            "
-      - name: Read app version
+          cmake -B build -S . \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j4
+
+      - name: Package
+        run: |
+          cd build
+          cpack -G "DEB;RPM;TGZ"
+
+      - name: Read version
         id: version
         run: |
-          ver=$(python3 -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)")
+          ver=$(grep -oP 'project\(BiliHistory VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt || echo '1.0.0')
           echo "APP_VERSION=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Verify package contents
+        run: |
+          ver="${{ steps.version.outputs.APP_VERSION }}"
+          arch="${{ matrix.arch }}"
+          for f in "build/bilihistory_${ver}_${arch}.deb" \
+                   "build/bilihistory-${ver}-1.${arch}.rpm" \
+                   "build/BiliHistory-${ver}-${arch}.tar.gz"; do
+            if [ ! -f "$f" ]; then echo "Missing package: $f"; exit 1; fi
+          done
+          tar -tzf "build/BiliHistory-${ver}-${arch}.tar.gz" | grep -q 'BiliHistory$' || { echo 'Executable missing in tarball'; exit 1; }
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BiliHistory-linux-${{ matrix.arch }}
           path: |
-            dist/BiliHistory-${{ matrix.arch }}
-            dist/BiliHistory-${{ matrix.arch }}.*
-            dist/bilihistory*
-            dist/*.AppImage
-            dist/*.ebuild
+            build/bin/BiliHistory
+            build/bilihistory_${{ steps.version.outputs.APP_VERSION }}_${{ matrix.arch }}.deb
+            build/bilihistory-${{ steps.version.outputs.APP_VERSION }}-1.${{ matrix.arch }}.rpm
+            build/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-${{ matrix.arch }}.tar.gz
 
   release:
     needs: [build-windows, build-linux]
@@ -132,19 +193,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Read app version
-        id: version
-        run: |
-          ver=$(python3 -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)")
-          echo "APP_VERSION=$ver" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: BiliHistory-*
-          merge-multiple: true
+
       - name: List release artifacts
         run: find artifacts -type f -ls
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

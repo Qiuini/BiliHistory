@@ -4,24 +4,35 @@
 # 授权私钥（绝不入库、绝不打包进客户端）
 tools/private_key.pem
 
-# 打包产物
+# 构建产物
 build/
 dist/
-*.spec.bak
-nuitka-crash-report.xml
-*.onefile-build/
-*.dist/
-*.build/
+vcpkg_installed/
 
 # 数据文件
 bilibili_history.csv
 backups/
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
-
 # IDE
 .idea/
+.vs/
+*.user
+*.suo
+
+# 运行时日志
+debug.log
+
+# C++ 构建生成物
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+out/
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
