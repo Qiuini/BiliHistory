@@ -1,9 +1,15 @@
 # BiliHistory Windows build script (PyInstaller + NSIS installer)
 # Usage (run from project root):
-#   powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Arch x64
+#   powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Arch x86
 # Output:
-#   dist\BiliHistory.exe
-#   dist\BiliHistory-1.0.0-setup.exe (if NSIS is installed)
+#   dist\BiliHistory-x64.exe / dist\BiliHistory-x86.exe
+#   dist\BiliHistory-1.0.0-x64-setup.exe / dist\BiliHistory-1.0.0-x86-setup.exe (if NSIS is installed)
+
+param(
+    [ValidateSet("x64", "x86")]
+    [string]$Arch = "x64"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -49,7 +55,9 @@ function Join-Paths([string]$base, [string]$child, [string]$leaf) {
     return Join-Path (Join-Path $base $child) $leaf
 }
 
-$artifact = Join-Paths $root 'dist' 'BiliHistory.exe'
+$srcExe = Join-Paths $root 'dist' 'BiliHistory.exe'
+$artifact = Join-Paths $root 'dist' "BiliHistory-${Arch}.exe"
+Move-Item -Path $srcExe -Destination $artifact -Force
 Write-Host "==> Portable executable: $artifact"
 
 # Build NSIS installer if available
@@ -59,14 +67,14 @@ if ($nsis) {
     Write-Host "==> Building installer with NSIS..."
     Get-ChildItem -Path (Join-Path $root 'dist') -Recurse -ErrorAction SilentlyContinue
     $ico = Resolve-Path (Join-Path $root 'favicon.ico') | Select-Object -ExpandProperty Path
-    $exe = Resolve-Path (Join-Paths $root 'dist' 'BiliHistory.exe') | Select-Object -ExpandProperty Path
-    if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-    $out = Join-Paths $root 'dist' "BiliHistory-${version}-setup.exe"
+    $exe = Resolve-Path $artifact | Select-Object -ExpandProperty Path
+    if (-not (Test-Path $exe)) { throw "dist\BiliHistory-${Arch}.exe not found at $exe" }
+    $out = Join-Paths $root 'dist' "BiliHistory-${version}-${Arch}-setup.exe"
     Write-Host "Using icon: $ico"
     Write-Host "Using source exe: $exe"
     Write-Host "Using output file: $out"
     & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" "/DAPP_VERSION=$version" packaging\installer.nsi
-    $setup = Join-Paths $root 'dist' "BiliHistory-${version}-setup.exe"
+    $setup = Join-Paths $root 'dist' "BiliHistory-${version}-${Arch}-setup.exe"
     if (Test-Path $setup) {
         Write-Host "==> Installer: $setup"
     } else {

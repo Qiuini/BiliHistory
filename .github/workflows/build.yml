@@ -37,6 +37,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          architecture: x64
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -48,63 +49,82 @@ jobs:
           $ver = python -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)"
           echo "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
       - name: Build with PyInstaller
+        shell: pwsh
         run: python -m PyInstaller packaging/bilihistory.spec --noconfirm --clean
       - name: Install NSIS
         run: choco install nsis -y
-      - name: List dist contents
-        shell: pwsh
-        run: Get-ChildItem -Path dist -Recurse -ErrorAction SilentlyContinue
-      - name: Build installer
+      - name: Build portable + installer
         shell: pwsh
         run: |
-          $ver = "${{ steps.version.outputs.APP_VERSION }}"
-          $nsis = Get-ChildItem -Path "${env:ProgramFiles(x86)}\NSIS" -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $nsis) { $nsis = Get-Command makensis -ErrorAction SilentlyContinue }
-          if (-not $nsis) { throw "NSIS not found after installation" }
-          $ico = Resolve-Path favicon.ico | Select-Object -ExpandProperty Path
-          if (-not (Test-Path $ico)) { throw "favicon.ico not found at $ico" }
-          $exe = Resolve-Path dist\BiliHistory.exe | Select-Object -ExpandProperty Path
-          if (-not (Test-Path $exe)) { throw "dist\BiliHistory.exe not found at $exe" }
-          $out = Join-Path (Resolve-Path dist | Select-Object -ExpandProperty Path) "BiliHistory-${ver}-setup.exe"
-          Write-Host "Using icon: $ico"
-          Write-Host "Using source exe: $exe"
-          Write-Host "Using output file: $out"
-          & $nsis.FullName "/DICON_PATH=$ico" "/DSOURCE_EXE=$exe" "/DOUT_FILE=$out" "/DAPP_VERSION=$ver" packaging\installer.nsi
+          & scripts/build_windows.ps1 -Arch x64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BiliHistory-windows
+          name: BiliHistory-windows-x64
           path: |
-            dist/BiliHistory.exe
-            dist/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-setup.exe
+            dist/BiliHistory-x64.exe
+            dist/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-x64-setup.exe
 
   build-linux:
     needs: test
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            image: ''
+            platform: ''
+          - arch: arm64
+            runner: ubuntu-latest
+            image: arm64v8/python:3.12-bookworm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up QEMU
+        if: matrix.platform != ''
+        uses: docker/setup-qemu-action@v3
         with:
-          python-version: '3.12'
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev libfuse2
-      - name: Install appimagetool
-        run: |
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool
-          chmod +x /usr/local/bin/appimagetool
-      - name: Build Linux packages
+          platforms: ${{ matrix.platform }}
+      - name: Build native ${{ matrix.arch }}
+        if: matrix.platform == ''
+        env:
+          ARCH: ${{ matrix.arch }}
         run: bash scripts/build_linux.sh
+      - name: Build in container ${{ matrix.arch }}
+        if: matrix.platform != ''
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm \
+            --platform ${{ matrix.platform }} \
+            -v "$(pwd):/workspace" \
+            -w /workspace \
+            -e ARCH=${{ matrix.arch }} \
+            ${{ matrix.image }} \
+            bash -c "
+              apt-get update && \
+              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential && \
+              gem install --no-document fpm && \
+              bash scripts/build_linux.sh
+            "
+      - name: Read app version
+        id: version
+        run: |
+          ver=$(python3 -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)")
+          echo "APP_VERSION=$ver" >> "$GITHUB_OUTPUT"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BiliHistory-linux
+          name: BiliHistory-linux-${{ matrix.arch }}
           path: |
-            dist/BiliHistory
-            dist/BiliHistory-x86_64.tar.gz
-            dist/*.deb
-            dist/*.AppImage
+            dist/BiliHistory-${{ matrix.arch }}
+            dist/BiliHistory-${{ matrix.arch }}.*
+            dist/bilihistory_${{ steps.version.outputs.APP_VERSION }}_*.deb
+            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}-*.rpm
+            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}-*.pkg.tar.zst
+            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}.ebuild
 
   release:
     needs: [build-windows, build-linux]
@@ -117,23 +137,18 @@ jobs:
       - name: Read app version
         id: version
         run: |
-          ver=$(python -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)")
+          ver=$(python3 -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)")
           echo "APP_VERSION=$ver" >> "$GITHUB_OUTPUT"
-      - name: Download Windows artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: BiliHistory-windows
-          path: dist-windows
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: BiliHistory-linux
-          path: dist-linux
+          path: artifacts
+          pattern: BiliHistory-*
+          merge-multiple: true
+      - name: List release artifacts
+        run: find artifacts -type f -ls
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist-windows/BiliHistory.exe
-            dist-windows/BiliHistory-${{ steps.version.outputs.APP_VERSION }}-setup.exe
-            dist-linux/*
+          files: artifacts/**/*
           generate_release_notes: true
