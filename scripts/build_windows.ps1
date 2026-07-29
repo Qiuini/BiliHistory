@@ -53,7 +53,7 @@ if (-not $version) { $version = "1.0.0" }
 Write-Host "==> Building version: $version"
 
 Write-Host "==> Installing build dependencies..."
-Invoke-Py -m pip install pyinstaller PyQt6==6.7.1 cryptography requests Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
+Invoke-Py -m pip install pyinstaller PyQt6==6.7.1 cryptography requests Pillow
 
 Write-Host "==> Building portable executable with PyInstaller..."
 Invoke-Py -m PyInstaller packaging\bilihistory.spec --noconfirm --clean

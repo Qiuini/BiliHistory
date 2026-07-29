@@ -79,7 +79,7 @@ jobs:
         if: matrix.platform == ''
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo apt-get install -y ruby ruby-dev build-essential libarchive-tools rpm
           sudo gem install --no-document fpm
       - name: Set up QEMU
         if: matrix.platform != ''
@@ -104,8 +104,8 @@ jobs:
             ${{ matrix.image }} \
             bash -c "
               apt-get update && \
-              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential && \
-              gem install --no-document fpm && \
+              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential libarchive-tools rpm && \\
+              gem install --no-document fpm && \\
               bash scripts/build_linux.sh
             "
       - name: Read app version
