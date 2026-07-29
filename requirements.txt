@@ -1,6 +1,7 @@
 # 运行时依赖
 requests>=2.28
-PyQt6>=6.5
+# 锁定 6.7.1：6.8+ 官方不再提供 Linux aarch64 wheel，为了 CI 多架构构建保持一致
+PyQt6==6.7.1
 cryptography>=41.0
 
 # 开发 / 测试

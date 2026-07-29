@@ -17,39 +17,46 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-# Choose Python interpreter: prefer py -3.12, then venv, then system python
-$py = $null
-$candidates = @("py -3.12")
+# Choose Python interpreter: prefer venv, then py -3.12, then system python
+$pyCmd = $null
+$candidates = @()
 $venvPy = Join-Path $root ".venv\Scripts\python.exe"
-if (Test-Path $venvPy) { $candidates = @($venvPy) + $candidates }
+if (Test-Path $venvPy) { $candidates += $venvPy }
+$candidates += "py -3.12"
 $candidates += "python"
 
 foreach ($c in $candidates) {
     try {
         $parts = $c -split ' ', 2
         & $parts[0] $parts[1] --version | Out-Null
-        $py = $c
+        $pyCmd = $c
         break
     } catch {}
 }
 
-if (-not $py) {
+if (-not $pyCmd) {
     Write-Error "No usable Python interpreter found"
     exit 1
 }
 
-Write-Host "==> Using interpreter: $py"
+$pyParts = $pyCmd -split ' ', 2
+function Invoke-Py {
+    param([Parameter(ValueFromRemainingArguments=$true)]$ArgsList)
+    & $pyParts[0] $pyParts[1] @ArgsList
+}
+
+Write-Host "==> Using interpreter: $pyCmd"
 
 # 从 Python 读取统一版本号
-$version = & $py -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)" 2>$null
+$version = Invoke-Py -c "import sys; sys.path.insert(0, 'src'); from version import APP_VERSION; print(APP_VERSION)" 2>$null
 if (-not $version) { $version = "1.0.0" }
 Write-Host "==> Building version: $version"
 
 Write-Host "==> Installing build dependencies..."
-& $py -m pip install pyinstaller PyQt6 cryptography requests Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
+Invoke-Py -m pip install pyinstaller PyQt6==6.7.1 cryptography requests Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 Write-Host "==> Building portable executable with PyInstaller..."
-& $py -m PyInstaller packaging\bilihistory.spec --noconfirm --clean
+Invoke-Py -m PyInstaller packaging\bilihistory.spec --noconfirm --clean
 
 function Join-Paths([string]$base, [string]$child, [string]$leaf) {
     return Join-Path (Join-Path $base $child) $leaf

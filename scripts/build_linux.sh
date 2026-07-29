@@ -32,7 +32,7 @@ echo "==> 构建版本: $VERSION  目标架构: $ARCH"
 
 # 安装构建依赖
 echo "==> 安装构建依赖"
-"$PY" -m pip install pyinstaller cryptography PyQt6 requests Pillow
+"$PY" -m pip install pyinstaller cryptography PyQt6==6.7.1 requests Pillow
 
 # 安装 fpm（一次性生成 deb/rpm/pacman 等多格式）
 if ! command -v fpm >/dev/null 2>&1; then
