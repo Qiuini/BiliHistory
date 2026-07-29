@@ -7,8 +7,8 @@
 
 APP_NAME = "BiliHistory"
 APP_NAME_CN = "BiliHistory - B站历史记录管理工具"
-APP_VERSION = "1.0.11"
-APP_VERSION_TUPLE = (1, 0, 11)
+APP_VERSION = "1.0.12"
+APP_VERSION_TUPLE = (1, 0, 12)
 PUBLISHER = "Qiuini"
 APP_URL = "https://github.com/Qiuini/BiliHistory"
 

@@ -120,7 +120,7 @@ jobs:
           path: |
             dist/BiliHistory-${{ matrix.arch }}
             dist/BiliHistory-${{ matrix.arch }}.*
-            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}*
+            dist/bilihistory*
             dist/*.AppImage
             dist/*.ebuild
 
