@@ -79,7 +79,7 @@ jobs:
         if: matrix.platform == ''
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential libarchive-tools rpm
+          sudo apt-get install -y ruby ruby-dev build-essential libarchive-tools rpm zip
           sudo gem install --no-document fpm
       - name: Set up QEMU
         if: matrix.platform != ''
@@ -104,8 +104,8 @@ jobs:
             ${{ matrix.image }} \
             bash -c "
               apt-get update && \
-              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential libarchive-tools rpm && \\
-              gem install --no-document fpm && \\
+              apt-get install -y dpkg-dev libfuse2 ruby ruby-dev build-essential libarchive-tools rpm zip && \\
+              gem install --no-document fpm && \
               bash scripts/build_linux.sh
             "
       - name: Read app version
@@ -120,10 +120,9 @@ jobs:
           path: |
             dist/BiliHistory-${{ matrix.arch }}
             dist/BiliHistory-${{ matrix.arch }}.*
-            dist/bilihistory_${{ steps.version.outputs.APP_VERSION }}_*.deb
-            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}-*.rpm
-            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}-*.pkg.tar.zst
-            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}.ebuild
+            dist/bilihistory-${{ steps.version.outputs.APP_VERSION }}*
+            dist/*.AppImage
+            dist/*.ebuild
 
   release:
     needs: [build-windows, build-linux]

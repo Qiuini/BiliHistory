@@ -3,18 +3,25 @@
 # 用法（在项目根目录）： ARCH=amd64 bash scripts/build_linux.sh
 # 环境变量：
 #   ARCH       目标架构：amd64 / arm64（默认 amd64）
-#              注：i386/x86 32 位被 PyQt6 官方 wheel 弃用，CI 不再构建
+#              注：Linux i386 / armhf 因 PyQt6 官方未提供 wheel，CI 不构建
 #   PYTHON     Python 解释器（默认 python3）
 #
 # 产物（dist/ 目录，文件名带架构后缀）：
 #   BiliHistory-<arch>                  PyInstaller 单文件可执行
 #   BiliHistory-<arch>.tar.gz/.bz2/.xz  便携压缩包
+#   BiliHistory-<arch>.zip              便携 zip 包
 #   bilihistory_<version>_<arch>.deb    Debian/Ubuntu 安装包
 #   bilihistory-<version>-1.<arch>.rpm  Fedora/openSUSE/RHEL 安装包
 #   bilihistory-<version>-1-<arch>.pkg.tar.zst  Arch Linux 安装包
+#   bilihistory-<version>-<arch>.apk    Alpine Linux 安装包
+#   bilihistory-<version>-<arch>.sh     自解压 shell 安装包
+#   bilihistory-<version>-<arch>.txz    Slackware 安装包
 #   BiliHistory-<arch>.AppImage         AppImage（需 appimagetool，可选）
 #   bilihistory-<version>.ebuild        Gentoo ebuild 模板
 #
+# 架构说明：
+#   - amd64 / arm64：PyQt6 官方提供 Linux wheel，完整支持
+#   - i386 / armhf：PyQt6 官方未提供 Linux wheel，脚本保留映射但 CI 不构建
 # 注意：请在 Linux 环境、WSL、Docker 或 GitHub Actions 执行。
 set -euo pipefail
 
@@ -62,9 +69,17 @@ echo "==> 生成 tar.* 便携包"
   tar cjf "${APP}-${ARCH}.tar.bz2" "${APP}-${ARCH}" && \
   tar cJf "${APP}-${ARCH}.tar.xz" "${APP}-${ARCH}" )
 
-# ---------------- 使用 fpm 统一生成 deb/rpm/pacman ----------------
+# ---------------- zip 便携包 ----------------
+if command -v zip >/dev/null 2>&1; then
+  echo "==> 生成 zip 便携包"
+  ( cd dist && zip -q "${APP}-${ARCH}.zip" "${APP}-${ARCH}" )
+else
+  echo "!! 未检测到 zip，跳过 zip 构建"
+fi
+
+# ---------------- 使用 fpm 统一生成 deb/rpm/pacman/apk/sh ----------------
 if command -v fpm >/dev/null 2>&1; then
-  echo "==> 使用 fpm 生成 deb / rpm / pacman"
+  echo "==> 使用 fpm 生成 deb / rpm / pacman / apk / sh"
 
   STAGE="dist/fpm-stage"
   rm -rf "$STAGE"
@@ -77,10 +92,10 @@ if command -v fpm >/dev/null 2>&1; then
 
   # 不同架构对应的包格式内部命名
   case "$ARCH" in
-    amd64)  FPM_ARCH="amd64" ; RPM_ARCH="x86_64" ; PAC_ARCH="x86_64" ;;
-    arm64)  FPM_ARCH="arm64" ; RPM_ARCH="aarch64" ; PAC_ARCH="aarch64" ;;
-    i386)   FPM_ARCH="i386"  ; RPM_ARCH="i386" ; PAC_ARCH="i686" ;;
-    *)      FPM_ARCH="$ARCH" ; RPM_ARCH="$ARCH" ; PAC_ARCH="$ARCH" ;;
+    amd64)  FPM_ARCH="amd64" ; RPM_ARCH="x86_64" ; PAC_ARCH="x86_64" ; APK_ARCH="x86_64" ; TXZ_ARCH="x86_64" ;;
+    arm64)  FPM_ARCH="arm64" ; RPM_ARCH="aarch64" ; PAC_ARCH="aarch64" ; APK_ARCH="aarch64" ; TXZ_ARCH="aarch64" ;;
+    i386)   FPM_ARCH="i386"  ; RPM_ARCH="i386" ; PAC_ARCH="i686" ; APK_ARCH="x86" ; TXZ_ARCH="i386" ;;
+    *)      FPM_ARCH="$ARCH" ; RPM_ARCH="$ARCH" ; PAC_ARCH="$ARCH" ; APK_ARCH="$ARCH" ; TXZ_ARCH="$ARCH" ;;
   esac
 
   # .deb
@@ -110,8 +125,43 @@ if command -v fpm >/dev/null 2>&1; then
     --maintainer "BiliHistory <you@example.com>" \
     --license "Proprietary" --category "utils" \
     -C "$STAGE" -p "dist/${APP_LOWER}-${VERSION}-1-${PAC_ARCH}.pkg.tar.zst"
+
+  # .apk (Alpine Linux)
+  fpm -s dir -t apk \
+    -n "$APP_LOWER" -v "$VERSION" -a "$APK_ARCH" \
+    --depends "musl" --depends "glib" --depends "mesa-gl" \
+    --description "B站历史记录管理工具" \
+    --maintainer "BiliHistory <you@example.com>" \
+    --license "Proprietary" --category "utils" \
+    -C "$STAGE" -p "dist/${APP_LOWER}-${VERSION}-${APK_ARCH}.apk"
+
+  # .sh (self-extracting archive)
+  fpm -s dir -t sh \
+    -n "$APP_LOWER" -v "$VERSION" -a "$FPM_ARCH" \
+    --description "B站历史记录管理工具" \
+    --maintainer "BiliHistory <you@example.com>" \
+    --license "Proprietary" --category "utils" \
+    -C "$STAGE" -p "dist/${APP_LOWER}-${VERSION}-${FPM_ARCH}.sh"
+
+  # .txz (Slackware)
+  echo "==> 生成 Slackware txz 包"
+  mkdir -p "$STAGE/install"
+  cat > "$STAGE/install/slack-desc" <<EOF
+bilihistory: BiliHistory (B站历史记录管理工具)
+bilihistory:
+bilihistory: 抓取、备份并管理个人 Bilibili 观看历史记录的桌面工具。
+bilihistory: 支持游标分页抓取、快照备份、去重、排序与类型筛选。
+bilihistory:
+bilihistory:
+bilihistory:
+bilihistory:
+bilihistory:
+bilihistory:
+bilihistory:
+EOF
+  ( cd "$STAGE" && tar cJf "${ROOT}/dist/${APP_LOWER}-${VERSION}-${TXZ_ARCH}.txz" . )
 else
-  echo "!! 未安装 fpm，跳过 deb/rpm/pacman 构建"
+  echo "!! 未安装 fpm，跳过 deb/rpm/pacman/apk/sh/txz 构建"
 fi
 
 # ---------------- AppImage（可选） ----------------
