@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B站历史记录工具使用说明书</title>
+    <title>BiliHistory — B站历史记录管理工具</title>
     <style>
         :root {
             --primary-color: #FB7299;
@@ -64,6 +64,13 @@
         }
         li {
             margin-bottom: 10px;
+        }
+        a {
+            color: var(--secondary-color);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
         }
         .container {
             background-color: white;
@@ -138,22 +145,38 @@
             margin: 20px 0;
             border-radius: 0 6px 6px 0;
         }
-        .param-table {
+        .param-table, .download-table {
             width: 100%;
             border-collapse: collapse;
             margin: 20px 0;
         }
-        .param-table th, .param-table td {
+        .param-table th, .param-table td,
+        .download-table th, .download-table td {
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
-        .param-table th {
+        .param-table th, .download-table th {
             background-color: var(--light-bg);
             font-weight: 600;
         }
-        .param-table tr:hover {
+        .param-table tr:hover, .download-table tr:hover {
             background-color: var(--light-bg);
+        }
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 12px 28px;
+            border-radius: 25px;
+            font-weight: 600;
+            margin: 10px 10px 10px 0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(251, 114, 153, 0.3);
+            text-decoration: none;
         }
         footer {
             text-align: center;
@@ -183,129 +206,170 @@
 </head>
 <body>
     <header>
-        <h1>B站历史记录工具</h1>
-        <p>高效获取、处理和管理您的B站观看历史</p>
+        <h1>BiliHistory</h1>
+        <p>B站历史记录、关注列表、收藏夹本地化管理工具</p>
     </header>
 
     <div class="container">
         <h2>项目介绍</h2>
-        <p>这是一个功能强大的B站历史记录管理工具，能够帮助您获取、处理和分析您的B站观看历史记录。工具支持视频、直播和专栏三种类型的历史记录，并提供去重、排序、筛选等多种数据处理功能。</p>
+        <p>BiliHistory 是一款面向 Windows 与 Linux 的 B站数据本地化管理工具。它通过 B站官方 API 抓取用户的观看历史、关注列表、收藏夹等信息，并以 CSV 形式持久化到本地，方便后续搜索、筛选、统计与回溯。</p>
+        <div class="success">
+            <p><strong>核心设计理念</strong>：数据 100% 存储在本地、增量抓取只增不删、30 天免费试用、单窗口 PyQt6 桌面应用。</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>下载安装</h2>
+        <p>推荐直接从最新 Release 下载已编译好的二进制文件：</p>
+        <a class="download-btn" href="https://github.com/Qiuini/BiliHistory/releases/latest" target="_blank">前往 GitHub Releases 下载</a>
+
+        <h3>Windows</h3>
+        <ul>
+            <li><code>BiliHistory-x64.exe</code>：便携单文件，双击运行</li>
+            <li><code>BiliHistory-&lt;version&gt;-x64-setup.exe</code>：安装包（写入 Program Files、开始菜单、桌面快捷方式）</li>
+        </ul>
+        <div class="note">
+            <p>Windows x86（32 位）暂不支持，因为 PyQt6 官方未提供 win32 wheel。</p>
+        </div>
+
+        <h3>Linux（12 种发行版格式）</h3>
+        <table class="download-table">
+            <thead>
+                <tr><th>格式</th><th>适用发行版</th><th>文件名示例</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>.deb</code></td><td>Debian / Ubuntu / Deepin</td><td><code>bilihistory_1.0.12_amd64.deb</code></td></tr>
+                <tr><td><code>.rpm</code></td><td>Fedora / openSUSE / RHEL</td><td><code>bilihistory-1.0.12-1.x86_64.rpm</code></td></tr>
+                <tr><td><code>.pkg.tar.zst</code></td><td>Arch Linux / Manjaro</td><td><code>bilihistory-1.0.12-1-x86_64.pkg.tar.zst</code></td></tr>
+                <tr><td><code>.apk</code></td><td>Alpine Linux</td><td><code>bilihistory-1.0.12-x86_64.apk</code></td></tr>
+                <tr><td><code>.txz</code></td><td>Slackware / Salix</td><td><code>bilihistory-1.0.12-x86_64.txz</code></td></tr>
+                <tr><td><code>.sh</code></td><td>通用自解压包</td><td><code>bilihistory-1.0.12-amd64.sh</code></td></tr>
+                <tr><td><code>.tar.gz / .tar.bz2 / .tar.xz</code></td><td>通用便携包</td><td><code>BiliHistory-amd64.tar.gz</code></td></tr>
+                <tr><td><code>.zip</code></td><td>通用便携包</td><td><code>BiliHistory-amd64.zip</code></td></tr>
+                <tr><td><code>.AppImage</code></td><td>通用（CI 未生成，脚本保留）</td><td><code>BiliHistory-amd64.AppImage</code></td></tr>
+                <tr><td><code>.ebuild</code></td><td>Gentoo 模板</td><td><code>bilihistory-1.0.12.ebuild</code></td></tr>
+            </tbody>
+        </table>
+        <div class="note">
+            <p>Linux i386 / armhf 暂不支持，因为 PyQt6 官方未提供对应 wheel。当前支持 amd64 与 arm64。</p>
+        </div>
     </div>
 
     <div class="container">
         <h2>功能说明</h2>
         <div class="feature-card">
-            <h3>数据获取</h3>
-            <p>从B站API获取您的观看历史记录，包括视频、直播和专栏内容。支持分页获取和增量更新，避免重复获取已有的记录。</p>
+            <h3>历史记录管理</h3>
+            <p>一键抓取全部 B站观看历史（视频 / 直播 / 专栏），本地 CSV 存储，Excel 可直接打开；每次抓取自动生成快照备份，增量去重合并。</p>
         </div>
         <div class="feature-card">
-            <h3>数据处理</h3>
-            <p>提供多种数据处理功能，包括：</p>
-            <ul>
-                <li>移除重复的视频记录（基于BV号）</li>
-                <li>按观看时间排序记录</li>
-                <li>按内容类型筛选（视频、直播、专栏）</li>
-            </ul>
+            <h3>数据浏览与筛选</h3>
+            <p>表格展示类型标签、标题、UP主、分类、观看进度、观看时间、BV号/房间号/文章ID；支持关键词搜索、类型筛选、时间筛选与多列排序。</p>
         </div>
         <div class="feature-card">
-            <h3>灵活配置</h3>
-            <p>通过命令行参数，您可以灵活选择需要执行的功能，如仅获取数据、仅处理数据或执行完整流程。</p>
+            <h3>我的关注</h3>
+            <p>抓取并展示关注列表，3 列卡片网格异步加载头像，显示 UP主名称、签名、等级、认证信息。</p>
+        </div>
+        <div class="feature-card">
+            <h3>我的收藏</h3>
+            <p>树形分组展示收藏夹文件夹与收藏内容，支持视频、专栏等混合内容类型。</p>
+        </div>
+        <div class="feature-card">
+            <h3>数据统计（我的画像）</h3>
+            <p>基于本地 CSV 的纯本地统计：最常看 UP主、最常看分类、观看时段分布、完播率分析、最近 30 天观看趋势。</p>
+        </div>
+        <div class="feature-card">
+            <h3>会员与授权</h3>
+            <p>新用户首次使用起 30 天免费试用；激活码离线激活，机器码绑定。</p>
         </div>
     </div>
 
     <div class="container">
-        <h2>安装依赖</h2>
-        <p>在使用本工具前，请确保已安装以下依赖：</p>
+        <h2>安装依赖（源码运行）</h2>
         <div class="code-block">
             # 创建并激活虚拟环境（可选）
             python -m venv .venv
             .\.venv\Scripts\activate  # Windows
-            # source .venv/bin/activate  # macOS/Linux
+            # source .venv/bin/activate  # Linux/macOS
 
             # 安装依赖包
-            pip install requests tenacity
+            pip install -r requirements.txt
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>配置 Cookie</h2>
+        <p>Cookie 用于抓取用户私有数据（历史记录、关注、收藏）。推荐方式：</p>
+        <div class="code-block">
+            # Windows
+            set BILI_COOKIE=SESSDATA=xxx;DedeUserID=xxx
+
+            # Linux/macOS
+            export BILI_COOKIE="SESSDATA=xxx;DedeUserID=xxx"
+        </div>
+        <p>或参照 <code>.secrets.example.json</code> 创建 <code>.secrets.json</code>：</p>
+        <div class="code-block">
+            {
+              "cookie": "SESSDATA=xxx; DedeUserID=xxx"
+            }
+        </div>
+        <div class="note">
+            <p><code>.secrets.json</code> 已被 <code>.gitignore</code> 排除，不会误提交。</p>
         </div>
     </div>
 
     <div class="container">
         <h2>使用方法</h2>
-        <p>您可以通过命令行参数来控制工具的行为。基本用法如下：</p>
-        <div class="code-block">
-            python main.py [选项]
+        <h3>启动 GUI（推荐）</h3>
+        <div class="command-example">
+            <span>python</span> <span>gui_main.py</span>
         </div>
 
-        <h3>命令行参数</h3>
+        <h3>命令行模式</h3>
         <table class="param-table">
             <thead>
-                <tr>
-                    <th>参数</th>
-                    <th>描述</th>
-                </tr>
+                <tr><th>参数</th><th>描述</th></tr>
             </thead>
             <tbody>
-                <tr>
-                    <td><code>--fetch</code></td>
-                    <td>仅获取历史记录，不进行处理</td>
-                </tr>
-                <tr>
-                    <td><code>--process</code></td>
-                    <td>仅处理CSV文件，不获取新记录</td>
-                </tr>
-                <tr>
-                    <td><code>--remove-duplicates</code></td>
-                    <td>移除重复的BV号记录（仅在<code>--process</code>模式下有效）</td>
-                </tr>
-                <tr>
-                    <td><code>--sort</code></td>
-                    <td>按观看时间排序记录（仅在<code>--process</code>模式下有效）</td>
-                </tr>
-                <tr>
-                    <td><code>--filter-type TYPE</code></td>
-                    <td>按内容类型筛选（TYPE可选值：video, live, article；仅在<code>--process</code>模式下有效）</td>
-                </tr>
-                <tr>
-                    <td><code>--csv-file FILE</code></td>
-                    <td>指定CSV文件路径（默认：bilibili_history.csv）</td>
-                </tr>
+                <tr><td><code>--fetch</code></td><td>仅获取历史记录，不进行处理</td></tr>
+                <tr><td><code>--process</code></td><td>仅处理 CSV 文件，不获取新记录</td></tr>
+                <tr><td><code>--remove-duplicates</code></td><td>移除重复记录（仅在 <code>--process</code> 模式下有效）</td></tr>
+                <tr><td><code>--sort</code></td><td>按观看时间排序（仅在 <code>--process</code> 模式下有效）</td></tr>
+                <tr><td><code>--filter-type TYPE</code></td><td>按类型筛选：video / live / article</td></tr>
+                <tr><td><code>--csv-file FILE</code></td><td>指定 CSV 文件路径</td></tr>
             </tbody>
         </table>
 
-        <h3>示例用法</h3>
         <div class="command-example">
             <span>python</span> <span>main.py</span>
-            <span class="description">执行完整流程：获取历史记录并处理（去重+排序）</span>
+            <span class="description">执行完整流程：获取历史记录并处理</span>
         </div>
-
         <div class="command-example">
             <span>python</span> <span>main.py</span> <span class="option">--fetch</span>
-            <span class="description">仅获取历史记录，不进行处理</span>
+            <span class="description">仅获取历史记录</span>
         </div>
-
-        <div class="command-example">
-            <span>python</span> <span>main.py</span> <span class="option">--process</span>
-            <span class="description">仅处理CSV文件（默认执行去重和排序）</span>
-        </div>
-
-        <div class="command-example">
-            <span>python</span> <span>main.py</span> <span class="option">--process --remove-duplicates --sort</span>
-            <span class="description">处理CSV文件，移除重复记录并排序</span>
-        </div>
-
         <div class="command-example">
             <span>python</span> <span>main.py</span> <span class="option">--process --filter-type video</span>
-            <span class="description">处理CSV文件，仅保留视频类型的记录</span>
+            <span class="description">处理 CSV，仅保留视频类型记录</span>
         </div>
+    </div>
 
+    <div class="container">
+        <h2>自行打包</h2>
+        <h3>Windows</h3>
         <div class="command-example">
-            <span>python</span> <span>main.py</span> <span class="option">--csv-file my_history.csv</span>
-            <span class="description">使用指定的CSV文件路径</span>
+            <span>powershell</span> <span>-ExecutionPolicy</span> <span>Bypass</span> <span>-File</span> <span>scripts\build_windows.ps1</span> <span class="option">-Arch x64</span>
         </div>
+        <h3>Linux</h3>
+        <div class="command-example">
+            <span>bash</span> <span>scripts/build_linux.sh</span> <span class="option">[amd64|arm64]</span>
+        </div>
+        <p>GitHub Actions 会在推送 <code>v*</code> 标签时自动构建全部产物并发布 Release。</p>
     </div>
 
     <div class="container">
         <h2>注意事项</h2>
         <div class="note">
-            <p><strong>首次使用</strong>：请确保已在 <code>bilibili_history_fetcher.py</code> 中配置了正确的B站Cookie。</p>
+            <p><strong>首次使用</strong>：请确保已正确配置 B站 Cookie，否则无法获取私有数据。</p>
         </div>
         <div class="warning">
             <p><strong>API限制</strong>：为避免被B站API限制，请不要频繁执行获取操作。建议间隔至少1小时。</p>
@@ -321,23 +385,24 @@
     <div class="container">
         <h2>常见问题</h2>
         <h3>如何获取B站Cookie？</h3>
-        <p>1. 打开浏览器，登录B站账号；</p>
-        <p>2. 按F12打开开发者工具；</p>
-        <p>3. 切换到Network选项卡；</p>
-        <p>4. 刷新页面，找到任意一个B站的请求；</p>
-        <p>5. 在Request Headers中找到Cookie字段，复制其值。</p>
+        <ol>
+            <li>打开浏览器，登录B站账号；</li>
+            <li>按 F12 打开开发者工具；</li>
+            <li>切换到 Network 选项卡；</li>
+            <li>刷新页面，找到任意一个B站的请求；</li>
+            <li>在 Request Headers 中找到 Cookie 字段，复制其值。</li>
+        </ol>
 
         <h3>为什么获取不到历史记录？</h3>
-        <p>可能的原因：</p>
         <ul>
-            <li>Cookie无效或已过期，请重新获取并更新配置；</li>
+            <li>Cookie 无效或已过期，请重新获取并更新配置；</li>
             <li>网络连接问题，请检查网络状况；</li>
-            <li>B站API限制，请稍后再试。</li>
+            <li>B站 API 限制，请稍后再试。</li>
         </ul>
     </div>
 
     <footer>
-        <p>© 2023 B站历史记录工具 | 版本 1.0.0</p>
+        <p>© 2026 BiliHistory | 版本 1.0.12 | <a href="https://github.com/Qiuini/BiliHistory" target="_blank">GitHub</a></p>
     </footer>
 </body>
 </html>

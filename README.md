@@ -10,7 +10,7 @@
 
 ## 项目简介
 
-BiliHistory 是一款面向 Windows（后续支持 Linux）的 B站历史记录本地化管理工具。它通过 B站官方 API 抓取用户的观看历史、关注列表、收藏夹等信息，并以 CSV 形式持久化到本地，方便后续搜索、筛选、统计与回溯。
+BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管理工具。它通过 B站官方 API 抓取用户的观看历史、关注列表、收藏夹等信息，并以 CSV 形式持久化到本地，方便后续搜索、筛选、统计与回溯。
 
 ### 核心设计理念
 
@@ -131,7 +131,8 @@ HistoryofBilibili/
 ### 环境要求
 
 - Python 3.10 或更高版本
-- Windows 10/11（Linux 打包脚本已预留）
+- Windows 10/11 x64
+- Linux amd64 / arm64（提供 12 种发行版格式）
 
 ### 1. 克隆项目
 
@@ -222,53 +223,55 @@ python -m pytest -q
 
 所有构建脚本位于 `scripts/`，产物输出到 `dist/`。
 
-### Windows（Nuitka 单文件 .exe + NSIS 安装包）
+### Windows（PyInstaller 单文件 .exe + NSIS 安装包）
 
 ```powershell
-# 方式一：一键脚本（自动检测 NSIS，生成安装包）
-powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
-
-# 方式二：手动命令
-python -m nuitka --standalone --onefile --windows-console-mode=disable \
-  --enable-plugin=pyqt6 \
-  --windows-icon-from-ico=favicon.ico \
-  --include-data-files=favicon.ico=favicon.ico \
-  --include-data-files=src/config.json=src/config.json \
-  --output-dir=dist --output-filename=BiliHistory --jobs=4 gui_main.py
-
-# 若已安装 NSIS，再构建安装包
-makensis packaging\installer.nsi
+# 一键脚本（自动检测 NSIS，生成安装包）
+powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1 -Arch x64
 ```
 
 产物：
 
 | 文件 | 说明 |
 | --- | --- |
-| `dist/BiliHistory.exe` | 便携单文件 |
-| `dist/BiliHistory-1.0.0-setup.exe` | Windows 安装包（写入 Program Files、开始菜单、桌面快捷方式） |
+| `dist/BiliHistory-x64.exe` | 便携单文件 |
+| `dist/BiliHistory-<version>-x64-setup.exe` | Windows 安装包（写入 Program Files、开始菜单、桌面快捷方式） |
 
-> 注意：请使用完整安装的 CPython（如 python.org 或 Microsoft Store 版本），不要使用嵌入式/embeddable 发行版，否则 Nuitka 会报错。
+> 注意：请使用完整安装的 CPython（如 python.org 或 Microsoft Store 版本），不要使用嵌入式/embeddable 发行版，否则 PyInstaller/Nuitka 会报错。
+>
+> Windows x86（32 位）暂不支持，因为 PyQt6 官方未提供 win32 wheel。
 >
 > 安装包安装后，用户数据（Cookie、CSV、配置、授权文件）存放在 `%APPDATA%\BiliHistory`，与程序目录分离，方便修改和备份。
 
-### Linux（.deb / AppImage / tar.gz）
+### Linux（12 种发行版格式）
 
 在 Debian/Ubuntu 或其他 Linux 发行版执行：
 
 ```bash
-bash scripts/build_linux.sh
+bash scripts/build_linux.sh [amd64|arm64]
 ```
 
 产物：
 
-| 文件 | 说明 |
-| --- | --- |
-| `dist/BiliHistory` | PyInstaller 单文件可执行 |
-| `dist/BiliHistory-x86_64.tar.gz` | 便携压缩包 |
-| `dist/bilihistory_1.0.0_amd64.deb` | Debian/Ubuntu 安装包 |
-| `dist/BiliHistory-x86_64.AppImage` | 通用 Linux 可执行（需 appimagetool） |
+| 文件 | 说明 | 适用发行版 |
+| --- | --- | --- |
+| `dist/BiliHistory-<arch>` | PyInstaller 单文件可执行 | 通用 |
+| `dist/BiliHistory-<arch>.tar.gz` | gzip 便携压缩包 | 通用 |
+| `dist/BiliHistory-<arch>.tar.bz2` | bzip2 便携压缩包 | 通用 |
+| `dist/BiliHistory-<arch>.tar.xz` | xz 便携压缩包 | 通用 |
+| `dist/BiliHistory-<arch>.zip` | zip 便携压缩包 | 通用 |
+| `dist/bilihistory_<version>_<arch>.deb` | Debian/Ubuntu 安装包 | Debian、Ubuntu、Deepin |
+| `dist/bilihistory-<version>-1.<arch>.rpm` | RPM 安装包 | Fedora、openSUSE、RHEL |
+| `dist/bilihistory-<version>-1-<arch>.pkg.tar.zst` | pacman 安装包 | Arch Linux、Manjaro |
+| `dist/bilihistory-<version>-<arch>.apk` | Alpine 安装包 | Alpine Linux |
+| `dist/bilihistory-<version>-<arch>.txz` | Slackware 安装包 | Slackware、Salix |
+| `dist/bilihistory-<version>-<arch>.sh` | 自解压 shell 安装包 | 通用 |
+| `dist/bilihistory-<version>.ebuild` | Gentoo ebuild 模板 | Gentoo |
+| `dist/BiliHistory-<arch>.AppImage` | 通用 Linux 可执行（需 appimagetool） | 通用 |
 
-构建依赖：`python3-dev`, `dpkg-dev`（deb 需要）, `appimagetool`（AppImage 需要）。
+构建依赖（按需安装）：`python3-dev`, `dpkg-dev`, `ruby-dev`, `build-essential`, `libarchive-tools`, `rpm`, `zip`, `zstd`；`appimagetool`（AppImage 需要）。fpm 会自动生成 deb/rpm/pacman/apk/sh/txz。
+
+> Linux i386 / armhf 暂不支持，因为 PyQt6 官方未提供对应 wheel。
 
 Linux 用户数据存放在 `~/.config/bili-history`。
 
@@ -277,7 +280,9 @@ Linux 用户数据存放在 `~/.config/bili-history`。
 仓库已配置 `.github/workflows/build.yml`：
 
 - 每次 push / PR 自动跑测试。
-- 推送 `v*` 标签时自动构建 Windows `.exe`、Linux `.deb` / `.AppImage` / `.tar.gz`，并发布 Release。
+- 推送 `v*` 标签时自动构建 Windows `.exe`、Linux 12 种发行版格式，并发布 Release。
+
+最新 Release 下载：[https://github.com/Qiuini/BiliHistory/releases/latest](https://github.com/Qiuini/BiliHistory/releases/latest)
 
 ### 使用 PyInstaller（备用）
 
