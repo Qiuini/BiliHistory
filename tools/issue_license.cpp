@@ -160,7 +160,7 @@ int main(int argc, char* argv[])
 
     const QString expiryText = (exp < 0)
                                    ? QStringLiteral("永久")
-                                   : QDateTime::fromSecsSinceEpoch(exp, QTimeZone(QStringLiteral("UTC"))).toString(QStringLiteral("yyyy-MM-dd hh:mm"));
+                                   : QDateTime::fromSecsSinceEpoch(exp, QTimeZone(QByteArrayLiteral("UTC"))).toString(QStringLiteral("yyyy-MM-dd hh:mm"));
 
     std::cout << "=" << std::string(60, '=') << std::endl;
     std::cout << "类型: " << args.type.toStdString()
