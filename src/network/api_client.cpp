@@ -31,7 +31,7 @@ coro::Task<QJsonObject> ApiClient::getHistoryPage(qint64 maxOid,
     query.addQueryItem(QStringLiteral("max"), QString::number(maxOid));
     query.addQueryItem(QStringLiteral("view_at"), QString::number(viewAt));
     query.addQueryItem(QStringLiteral("business"), business);
-    query.addQueryItem(QStringLiteral("ps"), QString::number(qMin(m_config->pageSize(), 30)));
+    query.addQueryItem(QStringLiteral("ps"), QString::number(qMin(m_config->pageSize(), 100)));
     url.setQuery(query);
     co_return co_await sendRequest(url, cookie, token);
 }

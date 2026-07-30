@@ -56,7 +56,7 @@ coro::Task<void> HistoryFetcher::runFetch(const QString& cookie)
         int page = 1;
         qint64 maxOid = 0;
         qint64 viewAt = 0;
-        QString business;
+        QString business = QStringLiteral("all");
 
         while (true) {
             if (isCancelled()) {
@@ -99,6 +99,12 @@ coro::Task<void> HistoryFetcher::runFetch(const QString& cookie)
             const QString nextBusiness = cursor.value(QStringLiteral("business")).toString();
 
             if (nextMax == 0 && nextViewAt == 0) {
+                if (page == 1) {
+                    Logger::warning(QStringLiteral("首页 cursor 即为 0，可能 Cookie 已失效或 API 返回异常（已获取 %1 条）")
+                                        .arg(records.size()));
+                } else {
+                    Logger::info(QStringLiteral("已到最后一页，共 %1 页 %2 条").arg(page).arg(records.size()));
+                }
                 emit finished(records);
                 co_return;
             }

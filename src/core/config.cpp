@@ -19,7 +19,7 @@ bool Config::loadDefaults() {
         {QStringLiteral("request_retry_count"), 3},
         {QStringLiteral("request_slow_warning_ms"), 3000},
         {QStringLiteral("retry_wait_ms"), 2000},
-        {QStringLiteral("page_size"), 20},
+        {QStringLiteral("page_size"), 50},
         {QStringLiteral("fetch_all"), true},
         {QStringLiteral("fetch_history_delay_base_ms"), 1500},
         {QStringLiteral("fetch_history_delay_jitter_ms"), 1500},
@@ -119,7 +119,7 @@ int Config::retryWaitMs() const {
 }
 
 int Config::pageSize() const {
-    return value(QStringLiteral("page_size"), 20).toInt();
+    return value(QStringLiteral("page_size"), 50).toInt();
 }
 
 int Config::fetchHistoryDelayBaseMs() const {
