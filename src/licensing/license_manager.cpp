@@ -29,7 +29,7 @@ QString LicenseInfo::expiryText() const
     if (exp < 0) {
         return QStringLiteral("永久");
     }
-    return QDateTime::fromSecsSinceEpoch(exp, QTimeZone::UTC)
+    return QDateTime::fromSecsSinceEpoch(exp, QTimeZone(QStringLiteral("UTC")))
         .toString(QStringLiteral("yyyy-MM-dd hh:mm"));
 }
 
