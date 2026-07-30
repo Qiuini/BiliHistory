@@ -17,27 +17,17 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     env:
       QT_QPA_PLATFORM: offscreen
-      VCPKG_DEFAULT_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install dependencies (apt)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0 \
-            autoconf autoconf-archive automake libtool
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
-          vcpkgJsonGlob: 'vcpkg.json'
+          sudo apt-get install -y qt6-base-dev libssl-dev \
+            libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0
 
       - name: Configure
-        run: |
-          cmake -B build -S . \
-            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
-            -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build -j4
@@ -124,33 +114,20 @@ jobs:
         include:
           - arch: amd64
             runner: ubuntu-latest
-            triplet: x64-linux
           - arch: arm64
             runner: ubuntu-24.04-arm
-            triplet: arm64-linux
     runs-on: ${{ matrix.runner }}
-    env:
-      VCPKG_DEFAULT_TRIPLET: ${{ matrix.triplet }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install dependencies (apt)
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build cmake libegl1 libgl1 libxkbcommon-x11-0 libxkbcommon0 rpm dpkg-dev \
-            autoconf autoconf-archive automake libtool
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
-          vcpkgJsonGlob: 'vcpkg.json'
+          sudo apt-get install -y qt6-base-dev libssl-dev build-essential ninja-build cmake \
+            libegl1 libgl1 libxkbcommon-x11-0 libxkbcommon0 rpm dpkg-dev
 
       - name: Configure
-        run: |
-          cmake -B build -S . \
-            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
-            -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build -j4
