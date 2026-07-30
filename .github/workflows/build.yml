@@ -24,7 +24,8 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libgl1 libxkbcommon0 \
+            autoconf autoconf-archive automake libtool
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -136,7 +137,8 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build cmake libegl1 libgl1 libxkbcommon-x11-0 libxkbcommon0 rpm dpkg-dev
+          sudo apt-get install -y build-essential ninja-build cmake libegl1 libgl1 libxkbcommon-x11-0 libxkbcommon0 rpm dpkg-dev \
+            autoconf autoconf-archive automake libtool
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
