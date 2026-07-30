@@ -1,65 +1,76 @@
 #pragma once
 
-#include "exceptions.h"
+#include "core/i_config.h"
+#include "i_http_client.h"
 
-#include <QHash>
 #include <QNetworkAccessManager>
 #include <QObject>
-#include <QSet>
-#include <QUrl>
-
-#include <functional>
-#include <memory>
 
 namespace bili {
 
-struct NetworkResponse {
-    int statusCode = 0;
-    QByteArray body;
-    QUrl url;
-    qint64 elapsedMs = 0;
-};
-
-class NetworkReply : public QObject {
+// 基于 C++20 协程的 HTTP 客户端。
+// 所有网络操作都在调用线程的事件循环中执行，建议配合独立工作线程使用。
+//
+// 继承 IHttpClient 以支持依赖注入（ApiClient 接收 IHttpClient*）。
+// HttpClient 是 QObject，IHttpClient 不是 QObject，多继承合法。
+class HttpClient : public QObject, public IHttpClient {
     Q_OBJECT
 public:
-    explicit NetworkReply(QObject* parent = nullptr);
-
-    void cancel();
-    void setCancelFunc(std::function<void()> func);
-
-signals:
-    void finished(const bili::NetworkResponse& response);
-    void error(const bili::NetworkException& error);
-    void cancelled();
-
-private:
-    std::function<void()> m_cancelFunc;
-};
-
-class HttpClient : public QObject {
-    Q_OBJECT
-public:
-    explicit HttpClient(QObject* parent = nullptr);
+    explicit HttpClient(IConfig* config, QObject* parent = nullptr);
     ~HttpClient() override;
 
-    NetworkReply* get(const QUrl& url,
-                      const QHash<QString, QString>& headers = {},
-                      int maxRetries = -1,
-                      int timeoutMs = -1);
+    // 通用请求接口，支持 Get/Post/Put/Delete，含重试与取消令牌。
+    coro::Task<NetworkResponse> request(HttpMethod method,
+                                        const QUrl& url,
+                                        const QHash<QString, QString>& headers = {},
+                                        const QByteArray& body = {},
+                                        const QByteArray& contentType = "application/json",
+                                        coro::CancellationToken::Ptr token = nullptr,
+                                        int maxRetries = -1,
+                                        int timeoutMs = -1) override;
 
-    void cancelAll();
+    // 便捷方法
+    coro::Task<NetworkResponse> get(const QUrl& url,
+                                    const QHash<QString, QString>& headers = {},
+                                    coro::CancellationToken::Ptr token = nullptr,
+                                    int maxRetries = -1,
+                                    int timeoutMs = -1) override;
+
+    coro::Task<NetworkResponse> post(const QUrl& url,
+                                     const QByteArray& body = {},
+                                     const QHash<QString, QString>& headers = {},
+                                     const QByteArray& contentType = "application/json",
+                                     coro::CancellationToken::Ptr token = nullptr,
+                                     int maxRetries = -1,
+                                     int timeoutMs = -1) override;
+
+    coro::Task<NetworkResponse> put(const QUrl& url,
+                                    const QByteArray& body = {},
+                                    const QHash<QString, QString>& headers = {},
+                                    const QByteArray& contentType = "application/json",
+                                    coro::CancellationToken::Ptr token = nullptr,
+                                    int maxRetries = -1,
+                                    int timeoutMs = -1) override;
+
+    coro::Task<NetworkResponse> del(const QUrl& url,
+                                    const QHash<QString, QString>& headers = {},
+                                    coro::CancellationToken::Ptr token = nullptr,
+                                    int maxRetries = -1,
+                                    int timeoutMs = -1) override;
 
 private:
-    struct RequestContext;
+    coro::Task<NetworkResponse> requestOnce(HttpMethod method,
+                                            const QUrl& url,
+                                            const QHash<QString, QString>& headers,
+                                            const QByteArray& body,
+                                            const QByteArray& contentType,
+                                            coro::CancellationToken::Ptr token,
+                                            int timeoutMs);
 
-    void startRequest(std::shared_ptr<RequestContext> ctx);
-    void onFinished(std::shared_ptr<RequestContext> ctx);
-    bool shouldRetry(const std::shared_ptr<RequestContext>& ctx) const;
     int nextDelayMs(int retriesDone) const;
 
+    IConfig* m_config = nullptr;
     QNetworkAccessManager* m_manager = nullptr;
-    QSet<std::shared_ptr<RequestContext>> m_contexts;
 };
 
 } // namespace bili

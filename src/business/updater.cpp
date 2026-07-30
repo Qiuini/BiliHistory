@@ -1,4 +1,4 @@
-#include "updater.h"
+﻿#include "updater.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -6,9 +6,15 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
 #include <QUrl>
 
 namespace bili::business {
+
+namespace {
+// 更新检查总超时：覆盖 DNS/连接/传输全程，避免弱网下 helper 永久挂起泄漏。
+constexpr int kUpdateCheckTimeoutMs = 15000;
+} // namespace
 
 QList<int> parseVersion(const QString& version)
 {
@@ -66,8 +72,14 @@ void checkUpdate(const QString& currentVersion,
     request.setRawHeader("User-Agent",
                          QStringLiteral("BiliHistory/%1").arg(currentVersion).toUtf8());
     request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
+    request.setTransferTimeout(kUpdateCheckTimeoutMs);
 
     QNetworkReply* reply = manager->get(request);
+    // 看门狗：transferTimeout 仅覆盖传输阶段，DNS/连接挂起时需兜底强制中止并清理。
+    QTimer::singleShot(kUpdateCheckTimeoutMs, helper, [helper, reply]() {
+        if (reply) reply->abort();
+        helper->deleteLater();
+    });
     QObject::connect(reply, &QNetworkReply::finished, helper,
                      [helper, reply, currentVersion, callback]() {
         UpdateInfo info;

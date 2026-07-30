@@ -1,8 +1,6 @@
 #include "favorites_page.h"
 
 #include "animation_utils.h"
-#include "network/api_client.h"
-#include "network/fetchers.h"
 #include "theme.h"
 
 #include <QDesktopServices>
@@ -12,6 +10,8 @@
 #include <QTreeWidget>
 #include <QUrl>
 #include <QVBoxLayout>
+
+#include <map>
 
 namespace bili::gui {
 
@@ -47,11 +47,41 @@ QString recordTypeDisplay(RecordType type)
 
 } // namespace
 
-FavoritesPage::FavoritesPage(QWidget* parent)
+class FavoritesPage::Impl {
+public:
+    bili::IConfig* config = nullptr;
+    bili::IFavoritesFetcher* fetcher = nullptr;
+    QLabel* subtitle = nullptr;
+    QTreeWidget* tree = nullptr;
+    QPushButton* refreshBtn = nullptr;
+
+    bili::FavoriteFolderList folders;
+    std::map<QString, std::vector<bili::FavoriteItem>> resources;
+    QString cookie;
+    size_t pendingFolderIndex = 0;
+    bool fetching = false;
+};
+
+FavoritesPage::FavoritesPage(bili::IConfig* config, bili::IFavoritesFetcher* fetcher, QWidget* parent)
     : QWidget(parent)
+    , d(std::make_unique<Impl>())
 {
+    d->config = config;
+    d->fetcher = fetcher;
     buildUi();
+
+    if (d->fetcher) {
+        d->fetcher->setParent(this);
+        connect(d->fetcher, &bili::IFavoritesFetcher::foldersFinished,
+                this, &FavoritesPage::onFoldersFinished);
+        connect(d->fetcher, &bili::IFavoritesFetcher::resourcesFinished,
+                this, &FavoritesPage::onResourcesFinished);
+        connect(d->fetcher, &bili::IFavoritesFetcher::error,
+                this, &FavoritesPage::onFetcherError);
+    }
 }
+
+FavoritesPage::~FavoritesPage() = default;
 
 void FavoritesPage::buildUi()
 {
@@ -68,27 +98,27 @@ void FavoritesPage::buildUi()
 
     headerLayout->addStretch();
 
-    m_refreshBtn = new QPushButton(QStringLiteral("刷新收藏夹"), this);
-    m_refreshBtn->setObjectName(QStringLiteral("primaryButton"));
-    connect(m_refreshBtn, &QPushButton::clicked, this, &FavoritesPage::refreshRequested);
-    headerLayout->addWidget(m_refreshBtn);
+    d->refreshBtn = new QPushButton(QStringLiteral("刷新收藏夹"), this);
+    d->refreshBtn->setObjectName(QStringLiteral("primaryButton"));
+    connect(d->refreshBtn, &QPushButton::clicked, this, &FavoritesPage::refreshRequested);
+    headerLayout->addWidget(d->refreshBtn);
 
     mainLayout->addLayout(headerLayout);
 
-    m_subtitle = new QLabel(QStringLiteral("点击刷新收藏夹加载数据"), this);
-    m_subtitle->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;").arg(theme::TEXT_3));
-    mainLayout->addWidget(m_subtitle);
+    d->subtitle = new QLabel(QStringLiteral("点击刷新收藏夹加载数据"), this);
+    d->subtitle->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;").arg(theme::TEXT_3));
+    mainLayout->addWidget(d->subtitle);
 
-    m_tree = new QTreeWidget(this);
-    m_tree->setObjectName(QStringLiteral("FavoritesTree"));
-    m_tree->setHeaderHidden(true);
-    m_tree->setColumnCount(3);
-    m_tree->setColumnWidth(0, 420);
-    m_tree->setColumnWidth(1, 140);
-    m_tree->setColumnWidth(2, 100);
-    m_tree->setIndentation(20);
-    m_tree->setFrameShape(QFrame::NoFrame);
-    m_tree->setStyleSheet(QStringLiteral(
+    d->tree = new QTreeWidget(this);
+    d->tree->setObjectName(QStringLiteral("FavoritesTree"));
+    d->tree->setHeaderHidden(true);
+    d->tree->setColumnCount(3);
+    d->tree->setColumnWidth(0, 420);
+    d->tree->setColumnWidth(1, 140);
+    d->tree->setColumnWidth(2, 100);
+    d->tree->setIndentation(20);
+    d->tree->setFrameShape(QFrame::NoFrame);
+    d->tree->setStyleSheet(QStringLiteral(
         "QTreeWidget#FavoritesTree {"
         "  background-color: %1;"
         "  border: 1px solid %2;"
@@ -108,16 +138,16 @@ void FavoritesPage::buildUi()
         "}"
     ).arg(theme::CARD, theme::BORDER, theme::BORDER, theme::PINK_LIGHT, theme::TEXT, theme::SURFACE_HOVER));
 
-    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, &FavoritesPage::onItemDoubleClicked);
-    connect(m_tree, &QTreeWidget::itemExpanded, this, &FavoritesPage::onItemExpanded);
-    mainLayout->addWidget(m_tree, 1);
+    connect(d->tree, &QTreeWidget::itemDoubleClicked, this, &FavoritesPage::onItemDoubleClicked);
+    connect(d->tree, &QTreeWidget::itemExpanded, this, &FavoritesPage::onItemExpanded);
+    mainLayout->addWidget(d->tree, 1);
 
-    animation::installButtonScaleAnimation(m_refreshBtn);
+    animation::installButtonScaleAnimation(d->refreshBtn);
 }
 
 void FavoritesPage::refresh(const QString& cookie)
 {
-    if (m_fetching) {
+    if (d->fetching) {
         cancel();
     }
 
@@ -126,59 +156,51 @@ void FavoritesPage::refresh(const QString& cookie)
         return;
     }
 
-    m_cookie = cookie;
-    m_folders.clear();
-    m_resources.clear();
-    m_pendingFolderIndex = 0;
-    m_fetching = true;
+    if (!d->fetcher) {
+        emit error(QStringLiteral("收藏夹抓取器未注入"));
+        return;
+    }
+
+    d->cookie = cookie;
+    d->folders.clear();
+    d->resources.clear();
+    d->pendingFolderIndex = 0;
+    d->fetching = true;
     clearTree();
     updateSubtitle();
 
-    if (!m_client) {
-        m_client = new ApiClient(this);
-    }
-    if (!m_fetcher) {
-        m_fetcher = new FavoritesFetcher(m_client, this);
-        connect(m_fetcher, &FavoritesFetcher::foldersFinished,
-                this, &FavoritesPage::onFoldersFinished);
-        connect(m_fetcher, &FavoritesFetcher::resourcesFinished,
-                this, &FavoritesPage::onResourcesFinished);
-        connect(m_fetcher, &FavoritesFetcher::error,
-                this, &FavoritesPage::onFetcherError);
-    }
-
     emit statusChanged(QStringLiteral("正在加载收藏夹..."));
-    m_fetcher->fetchFolders(cookie);
+    d->fetcher->fetchFolders(cookie);
 }
 
 void FavoritesPage::cancel()
 {
-    if (m_fetcher && m_fetching) {
-        m_fetcher->cancel();
+    if (d->fetcher && d->fetching) {
+        d->fetcher->cancel();
     }
-    m_fetching = false;
+    d->fetching = false;
     updateSubtitle();
 }
 
 void FavoritesPage::clearTree()
 {
-    m_tree->clear();
+    d->tree->clear();
 }
 
 void FavoritesPage::updateSubtitle()
 {
-    const int folderCount = static_cast<int>(m_folders.size());
+    const int folderCount = static_cast<int>(d->folders.size());
     int resourceCount = 0;
-    for (const auto& folder : m_folders) {
+    for (const auto& folder : d->folders) {
         resourceCount += static_cast<int>(folder.items.size());
     }
 
-    if (m_fetching) {
-        m_subtitle->setText(QStringLiteral("共 %1 个收藏夹，已加载 %2 条内容")
+    if (d->fetching) {
+        d->subtitle->setText(QStringLiteral("共 %1 个收藏夹，已加载 %2 条内容")
                                 .arg(folderCount)
                                 .arg(resourceCount));
     } else {
-        m_subtitle->setText(QStringLiteral("共 %1 个收藏夹，%2 条内容")
+        d->subtitle->setText(QStringLiteral("共 %1 个收藏夹，%2 条内容")
                                 .arg(folderCount)
                                 .arg(resourceCount));
     }
@@ -186,9 +208,9 @@ void FavoritesPage::updateSubtitle()
 
 void FavoritesPage::onFoldersFinished(const bili::FavoriteFolderList& folders)
 {
-    m_folders = folders;
-    for (const auto& folder : m_folders) {
-        m_resources[QString::number(folder.id)] = {};
+    d->folders = folders;
+    for (const auto& folder : d->folders) {
+        d->resources[QString::number(folder.id)] = {};
     }
     renderFolders();
     loadNextFolderResources();
@@ -197,8 +219,8 @@ void FavoritesPage::onFoldersFinished(const bili::FavoriteFolderList& folders)
 void FavoritesPage::renderFolders()
 {
     clearTree();
-    for (const auto& folder : m_folders) {
-        auto* item = new QTreeWidgetItem(m_tree);
+    for (const auto& folder : d->folders) {
+        auto* item = new QTreeWidgetItem(d->tree);
         item->setText(0, QStringLiteral("📁 %1").arg(folder.name));
         item->setText(1, QStringLiteral("%1 条").arg(folder.mediaCount));
         item->setData(0, Qt::UserRole, QStringLiteral("folder:%1").arg(folder.id));
@@ -210,29 +232,29 @@ void FavoritesPage::renderFolders()
 
 void FavoritesPage::loadNextFolderResources()
 {
-    if (m_pendingFolderIndex >= m_folders.size()) {
-        m_fetching = false;
+    if (d->pendingFolderIndex >= d->folders.size()) {
+        d->fetching = false;
         updateSubtitle();
         emit statusChanged(QStringLiteral("收藏夹加载完成"));
         return;
     }
 
-    const qint64 folderId = m_folders[m_pendingFolderIndex].id;
+    const qint64 folderId = d->folders[d->pendingFolderIndex].id;
     emit statusChanged(QStringLiteral("正在加载收藏夹 %1 / %2")
-                           .arg(m_pendingFolderIndex + 1)
-                           .arg(m_folders.size()));
-    m_fetcher->fetchResources(QString::number(folderId), 20, m_cookie);
+                           .arg(d->pendingFolderIndex + 1)
+                           .arg(d->folders.size()));
+    d->fetcher->fetchResources(QString::number(folderId), d->config->favoritesPageSize(), d->cookie);
 }
 
 void FavoritesPage::onResourcesFinished(const QString& folderId,
                                         const std::vector<bili::FavoriteItem>& items)
 {
-    m_resources[folderId] = items;
+    d->resources[folderId] = items;
 
     // 找到对应文件夹节点并填充内容
     const qint64 id = folderId.toLongLong();
-    for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
-        auto* folderItem = m_tree->topLevelItem(i);
+    for (int i = 0; i < d->tree->topLevelItemCount(); ++i) {
+        auto* folderItem = d->tree->topLevelItem(i);
         const QString data = folderItem->data(0, Qt::UserRole).toString();
         if (data == QStringLiteral("folder:%1").arg(id)) {
             // 清除旧占位
@@ -250,14 +272,14 @@ void FavoritesPage::onResourcesFinished(const QString& folderId,
         }
     }
 
-    ++m_pendingFolderIndex;
+    ++d->pendingFolderIndex;
     updateSubtitle();
     loadNextFolderResources();
 }
 
 void FavoritesPage::onFetcherError(const bili::NetworkException& e)
 {
-    m_fetching = false;
+    d->fetching = false;
     updateSubtitle();
     emit error(e.message());
 }

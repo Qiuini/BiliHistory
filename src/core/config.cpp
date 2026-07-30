@@ -2,7 +2,7 @@
 #include "exceptions.h"
 #include "logger.h"
 #include "paths.h"
-#include "secrets_store.h"
+#include "licensing/secrets_store.h"
 #include "version.h"
 
 #include <QFile>
@@ -10,16 +10,7 @@
 #include <QJsonDocument>
 #include <QProcessEnvironment>
 
-#include <mutex>
-
 namespace bili {
-
-Config& Config::instance() {
-    static Config instance;
-    static std::once_flag flag;
-    std::call_once(flag, [&]() { instance.loadDefaults(); });
-    return instance;
-}
 
 bool Config::loadDefaults() {
     m_root = QJsonObject{
@@ -30,6 +21,12 @@ bool Config::loadDefaults() {
         {QStringLiteral("retry_wait_ms"), 2000},
         {QStringLiteral("page_size"), 20},
         {QStringLiteral("fetch_all"), true},
+        {QStringLiteral("fetch_history_delay_base_ms"), 1500},
+        {QStringLiteral("fetch_history_delay_jitter_ms"), 1500},
+        {QStringLiteral("fetch_list_delay_base_ms"), 500},
+        {QStringLiteral("fetch_list_delay_jitter_ms"), 500},
+        {QStringLiteral("following_page_size"), 50},
+        {QStringLiteral("favorites_page_size"), 20},
         {QStringLiteral("http_total_retries"), 3},
         {QStringLiteral("http_backoff_factor"), 1.0},
         {QStringLiteral("user_agent"), QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")},
@@ -125,8 +122,36 @@ int Config::pageSize() const {
     return value(QStringLiteral("page_size"), 20).toInt();
 }
 
+int Config::fetchHistoryDelayBaseMs() const {
+    return value(QStringLiteral("fetch_history_delay_base_ms"), 1500).toInt();
+}
+
+int Config::fetchHistoryDelayJitterMs() const {
+    return value(QStringLiteral("fetch_history_delay_jitter_ms"), 1500).toInt();
+}
+
+int Config::fetchListDelayBaseMs() const {
+    return value(QStringLiteral("fetch_list_delay_base_ms"), 500).toInt();
+}
+
+int Config::fetchListDelayJitterMs() const {
+    return value(QStringLiteral("fetch_list_delay_jitter_ms"), 500).toInt();
+}
+
+int Config::followingPageSize() const {
+    return value(QStringLiteral("following_page_size"), 50).toInt();
+}
+
+int Config::favoritesPageSize() const {
+    return value(QStringLiteral("favorites_page_size"), 20).toInt();
+}
+
 bool Config::fetchAll() const {
     return value(QStringLiteral("fetch_all"), true).toBool();
+}
+
+void Config::setFetchAll(bool fetchAll) {
+    setValue(QStringLiteral("fetch_all"), fetchAll);
 }
 
 int Config::httpTotalRetries() const {

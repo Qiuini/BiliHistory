@@ -330,6 +330,28 @@ QString Parser::favoriteTypeName(int typeId) {
     return mapping.value(typeId, QStringLiteral("video"));
 }
 
+UserInfo Parser::parseNavUserInfo(const QJsonObject& data) {
+    UserInfo info;
+    const QJsonObject dataObj = data.value(QStringLiteral("data")).toObject();
+
+    info.mid = toLongLong(dataObj.value(QStringLiteral("mid")));
+    info.name = dataObj.value(QStringLiteral("uname")).toString();
+    if (info.name.isEmpty()) {
+        info.name = dataObj.value(QStringLiteral("name")).toString();
+    }
+    info.faceUrl = dataObj.value(QStringLiteral("face")).toString();
+    info.level = dataObj.value(QStringLiteral("level_info")).toObject().value(QStringLiteral("current_level")).toInt();
+
+    const QJsonObject official = dataObj.value(QStringLiteral("official")).toObject();
+    if (!official.isEmpty()) {
+        info.officialVerify = official.value(QStringLiteral("type")).toInt();
+    } else {
+        info.officialVerify = dataObj.value(QStringLiteral("official_verify")).toObject().value(QStringLiteral("type")).toInt();
+    }
+
+    return info;
+}
+
 UserInfo Parser::parseUserCard(const QJsonObject& data) {
     UserInfo info;
     const QJsonObject dataObj = data.value(QStringLiteral("data")).toObject();
@@ -360,10 +382,8 @@ QDateTime Parser::parseTimestamp(qint64 ts) {
     if (ts <= 0) {
         return QDateTime::currentDateTime();
     }
-    if (ts > 1e12) {
-        // 毫秒时间戳
-        return QDateTime::fromMSecsSinceEpoch(ts);
-    }
+    // B 站 API 的 view_at / fav_time / regtime 字段统一为秒级 Unix 时间戳。
+    // 不再保留 ts > 1e12 的毫秒分支（B 站不会返回毫秒时间戳，属于过度防御）。
     return QDateTime::fromSecsSinceEpoch(ts);
 }
 

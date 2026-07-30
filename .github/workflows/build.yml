@@ -87,7 +87,7 @@ jobs:
           if ($content -match 'project\(BiliHistory VERSION (\d+\.\d+\.\d+)') {
             $ver = $Matches[1]
           } else {
-            $ver = '1.0.0'
+            $ver = '2.0.0'
           }
           "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
 
@@ -161,7 +161,7 @@ jobs:
       - name: Read version
         id: version
         run: |
-          ver=$(grep -oP 'project\(BiliHistory VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt || echo '1.0.0')
+          ver=$(grep -oP 'project\(BiliHistory VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt || echo '2.0.0')
           echo "APP_VERSION=$ver" >> "$GITHUB_OUTPUT"
 
       - name: Verify package contents

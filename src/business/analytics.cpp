@@ -1,8 +1,12 @@
 #include "analytics.h"
 
 #include <QDate>
-#include <QMap>
+#include <QHash>
 #include <QSet>
+
+#include <algorithm>
+#include <functional>
+#include <vector>
 
 namespace bili::business {
 
@@ -16,33 +20,12 @@ struct Aggregate {
 
 qint64 watchedSecondsForRecord(const RecordPtr& record)
 {
-    if (!record) {
-        return 0;
-    }
-
-    if (auto video = std::dynamic_pointer_cast<VideoRecord>(record)) {
-        if (video->duration <= 0) {
-            return 0;
-        }
-        // progressPercent 为负时视为完整观看（使用总时长）
-        if (video->progressPercent < 0) {
-            return video->duration;
-        }
-        return video->duration * video->progressPercent / 100;
-    }
-
-    return 0;
+    return record ? record->watchedSeconds() : 0;
 }
 
 int completionForRecord(const RecordPtr& record)
 {
-    if (!record) {
-        return 0;
-    }
-    if (record->progressPercent < 0) {
-        return 100;
-    }
-    return record->progressPercent;
+    return record ? record->effectiveCompletionPercent() : 0;
 }
 
 QVariantMap aggregateToMap(const QString& name, const Aggregate& agg)
@@ -56,6 +39,63 @@ QVariantMap aggregateToMap(const QString& name, const Aggregate& agg)
     map[QStringLiteral("avg_completion")] = avgCompletion;
     map[QStringLiteral("avg_completion_text")] = QStringLiteral("%1%").arg(avgCompletion);
     return map;
+}
+
+template <typename KeyFunc>
+QHash<QString, Aggregate> aggregateBy(const RecordList& records, KeyFunc keyFunc)
+{
+    QHash<QString, Aggregate> map;
+    map.reserve(static_cast<int>(records.size()));
+    for (const auto& record : records) {
+        if (!record) continue;
+        const QString key = keyFunc(record.get());
+        if (key.isEmpty()) continue;
+        Aggregate& agg = map[key];
+        ++agg.count;
+        agg.watchSeconds += watchedSecondsForRecord(record);
+        agg.completionSum += completionForRecord(record);
+    }
+    return map;
+}
+
+using RankedItem = std::pair<QString, Aggregate>;
+
+// 默认过滤谓词：接受所有条目。仅作为 topNFromMap 的模板默认参数使用。
+struct AcceptAllAggregate {
+    bool operator()(const Aggregate&) const noexcept { return true; }
+};
+
+template <typename Cmp, typename Pred = AcceptAllAggregate>
+QVariantList topNFromMap(QHash<QString, Aggregate> map,
+                         int topN,
+                         Cmp cmp,
+                         Pred pred = Pred{})
+{
+    std::vector<RankedItem> list;
+    list.reserve(static_cast<size_t>(map.size()));
+    for (auto it = map.begin(); it != map.end(); ++it) {
+        if (pred(it.value())) {
+            list.emplace_back(it.key(), it.value());
+        }
+    }
+
+    const auto less = [&cmp](const RankedItem& a, const RankedItem& b) {
+        return cmp(a.second, b.second); // true if a should come before b
+    };
+
+    if (topN > 0 && static_cast<size_t>(topN) < list.size()) {
+        std::partial_sort(list.begin(), list.begin() + topN, list.end(), less);
+        list.resize(static_cast<size_t>(topN));
+    } else {
+        std::sort(list.begin(), list.end(), less);
+    }
+
+    QVariantList result;
+    result.reserve(static_cast<int>(list.size()));
+    for (const auto& item : list) {
+        result.append(aggregateToMap(item.first, item.second));
+    }
+    return result;
 }
 
 } // namespace
@@ -127,64 +167,24 @@ QVariantMap computeBasicStats(const RecordList& records)
 
 QVariantList topAuthors(const RecordList& records, int topN)
 {
-    QMap<QString, Aggregate> map;
-    for (const auto& record : records) {
-        if (!record || record->authorName.isEmpty()) continue;
-        auto& agg = map[record->authorName];
-        ++agg.count;
-        agg.watchSeconds += watchedSecondsForRecord(record);
-        agg.completionSum += completionForRecord(record);
-    }
-
-    QList<QPair<QString, Aggregate>> list;
-    for (auto it = map.begin(); it != map.end(); ++it) {
-        list.append(qMakePair(it.key(), it.value()));
-    }
-
-    std::sort(list.begin(), list.end(), [](const auto& a, const auto& b) {
-        if (a.second.count != b.second.count) {
-            return a.second.count > b.second.count;
-        }
-        return a.second.watchSeconds > b.second.watchSeconds;
-    });
-
-    QVariantList result;
-    const int limit = qMin(topN, list.size());
-    for (int i = 0; i < limit; ++i) {
-        result.append(aggregateToMap(list[i].first, list[i].second));
-    }
-    return result;
+    return topNFromMap(
+        aggregateBy(records, [](const BaseRecord* r) { return r->authorName; }),
+        topN,
+        [](const Aggregate& a, const Aggregate& b) {
+            if (a.count != b.count) return a.count > b.count;
+            return a.watchSeconds > b.watchSeconds;
+        });
 }
 
 QVariantList topCategories(const RecordList& records, int topN)
 {
-    QMap<QString, Aggregate> map;
-    for (const auto& record : records) {
-        if (!record || record->category.isEmpty()) continue;
-        auto& agg = map[record->category];
-        ++agg.count;
-        agg.watchSeconds += watchedSecondsForRecord(record);
-        agg.completionSum += completionForRecord(record);
-    }
-
-    QList<QPair<QString, Aggregate>> list;
-    for (auto it = map.begin(); it != map.end(); ++it) {
-        list.append(qMakePair(it.key(), it.value()));
-    }
-
-    std::sort(list.begin(), list.end(), [](const auto& a, const auto& b) {
-        if (a.second.count != b.second.count) {
-            return a.second.count > b.second.count;
-        }
-        return a.second.watchSeconds > b.second.watchSeconds;
-    });
-
-    QVariantList result;
-    const int limit = qMin(topN, list.size());
-    for (int i = 0; i < limit; ++i) {
-        result.append(aggregateToMap(list[i].first, list[i].second));
-    }
-    return result;
+    return topNFromMap(
+        aggregateBy(records, [](const BaseRecord* r) { return r->category; }),
+        topN,
+        [](const Aggregate& a, const Aggregate& b) {
+            if (a.count != b.count) return a.count > b.count;
+            return a.watchSeconds > b.watchSeconds;
+        });
 }
 
 QVariantMap timeOfDayDistribution(const RecordList& records)
@@ -218,58 +218,101 @@ QVariantMap timeOfDayDistribution(const RecordList& records)
 
 QVariantList topAuthorsByCompletion(const RecordList& records, int minCount, int topN)
 {
-    QMap<QString, Aggregate> map;
-    for (const auto& record : records) {
-        if (!record || record->authorName.isEmpty()) continue;
-        auto& agg = map[record->authorName];
-        ++agg.count;
-        agg.watchSeconds += watchedSecondsForRecord(record);
-        agg.completionSum += completionForRecord(record);
-    }
+    auto map = aggregateBy(records, [](const BaseRecord* r) { return r->authorName; });
 
-    QList<QPair<QString, Aggregate>> list;
-    for (auto it = map.begin(); it != map.end(); ++it) {
-        if (it.value().count >= minCount) {
-            list.append(qMakePair(it.key(), it.value()));
-        }
-    }
+    const auto cmp = [](const Aggregate& a, const Aggregate& b) {
+        const int avgA = a.count > 0 ? static_cast<int>(a.completionSum / a.count) : 0;
+        const int avgB = b.count > 0 ? static_cast<int>(b.completionSum / b.count) : 0;
+        if (avgA != avgB) return avgA > avgB;
+        return a.count > b.count;
+    };
 
-    std::sort(list.begin(), list.end(), [](const auto& a, const auto& b) {
-        const int avgA = a.second.count > 0 ? static_cast<int>(a.second.completionSum / a.second.count) : 0;
-        const int avgB = b.second.count > 0 ? static_cast<int>(b.second.completionSum / b.second.count) : 0;
-        if (avgA != avgB) {
-            return avgA > avgB;
-        }
-        return a.second.count > b.second.count;
-    });
+    const auto pred = [minCount](const Aggregate& a) {
+        return a.count >= minCount;
+    };
 
-    QVariantList result;
-    const int limit = qMin(topN, list.size());
-    for (int i = 0; i < limit; ++i) {
-        result.append(aggregateToMap(list[i].first, list[i].second));
-    }
-    return result;
+    return topNFromMap(std::move(map), topN, cmp, pred);
 }
 
 QVariantList dailyTrend(const RecordList& records, int days)
 {
     const QDate today = QDate::currentDate();
-    QMap<QDate, int> counts;
+    const QDate windowStart = today.addDays(-(days - 1));
+    QHash<QDate, int> counts;
+    counts.reserve(static_cast<int>(records.size()));
 
     for (const auto& record : records) {
         if (!record || !record->viewAt.isValid()) continue;
         const QDate date = record->viewAt.date();
-        if (date.isValid() && date.daysTo(today) < days) {
+        // 仅聚合 [windowStart, ∞) 区间：未来日期（时钟漂移/数据预录）也计入，
+        // 不再用 date.daysTo(today) < days，避免未来记录被错误排除
+        if (date.isValid() && date >= windowStart) {
             ++counts[date];
         }
     }
 
     QVariantList result;
+    result.reserve(days);
     for (int i = days - 1; i >= 0; --i) {
         const QDate date = today.addDays(-i);
         QVariantMap map;
         map[QStringLiteral("date")] = date.toString(QStringLiteral("yyyy-MM-dd"));
         map[QStringLiteral("count")] = counts.value(date, 0);
+        result.append(map);
+    }
+    return result;
+}
+
+QVariantList monthlyTrend(const RecordList& records, int months)
+{
+    const QDate today = QDate::currentDate();
+    QHash<QString, int> counts;
+    counts.reserve(static_cast<int>(records.size()));
+
+    for (const auto& record : records) {
+        if (!record || !record->viewAt.isValid()) continue;
+        const QDate date = record->viewAt.date();
+        if (date.isValid()) {
+            const QString key = date.toString(QStringLiteral("yyyy-MM"));
+            ++counts[key];
+        }
+    }
+
+    QVariantList result;
+    result.reserve(months);
+    for (int i = months - 1; i >= 0; --i) {
+        const QDate month = today.addMonths(-i);
+        const QString key = month.toString(QStringLiteral("yyyy-MM"));
+        QVariantMap map;
+        map[QStringLiteral("date")] = key;
+        map[QStringLiteral("count")] = counts.value(key, 0);
+        result.append(map);
+    }
+    return result;
+}
+
+QVariantList yearlyTrend(const RecordList& records)
+{
+    QHash<int, int> counts;
+    counts.reserve(static_cast<int>(records.size()));
+
+    for (const auto& record : records) {
+        if (!record || !record->viewAt.isValid()) continue;
+        const QDate date = record->viewAt.date();
+        if (date.isValid()) {
+            ++counts[date.year()];
+        }
+    }
+
+    const QList<int> years = counts.keys();
+    const int minYear = years.isEmpty() ? QDate::currentDate().year() : *std::min_element(years.begin(), years.end());
+    const int maxYear = years.isEmpty() ? QDate::currentDate().year() : *std::max_element(years.begin(), years.end());
+
+    QVariantList result;
+    for (int year = minYear; year <= maxYear; ++year) {
+        QVariantMap map;
+        map[QStringLiteral("date")] = QString::number(year);
+        map[QStringLiteral("count")] = counts.value(year, 0);
         result.append(map);
     }
     return result;

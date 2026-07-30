@@ -19,6 +19,8 @@ inline const QString TEXT_2        = QStringLiteral("#4A4A5A");
 inline const QString TEXT_3        = QStringLiteral("#8A8A9A");
 inline const QString BORDER        = QStringLiteral("#EBE8EF");
 inline const QString SUCCESS       = QStringLiteral("#00B578");
+inline const QString WARNING       = QStringLiteral("#FF9900");
+inline const QString DANGER        = QStringLiteral("#FF4D4F");
 
 QString globalStyleSheet();
 

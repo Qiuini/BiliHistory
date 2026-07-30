@@ -2,25 +2,25 @@
 
 #include "core/exceptions.h"
 #include "core/models.h"
+#include "network/i_fetcher.h"
+#include "core/i_config.h"
 
-#include <QTreeWidget>
 #include <QWidget>
+
+#include <memory>
+#include <vector>
 
 class QLabel;
 class QPushButton;
 class QTreeWidgetItem;
-
-namespace bili {
-class ApiClient;
-class FavoritesFetcher;
-} // namespace bili
 
 namespace bili::gui {
 
 class FavoritesPage : public QWidget {
     Q_OBJECT
 public:
-    explicit FavoritesPage(QWidget* parent = nullptr);
+    explicit FavoritesPage(bili::IConfig* config, bili::IFavoritesFetcher* fetcher, QWidget* parent = nullptr);
+    ~FavoritesPage() override;
 
 public slots:
     void refresh(const QString& cookie);
@@ -45,17 +45,8 @@ private:
     void loadNextFolderResources();
     void updateSubtitle();
 
-    QLabel* m_subtitle = nullptr;
-    QTreeWidget* m_tree = nullptr;
-    QPushButton* m_refreshBtn = nullptr;
-
-    bili::ApiClient* m_client = nullptr;
-    bili::FavoritesFetcher* m_fetcher = nullptr;
-    bili::FavoriteFolderList m_folders;
-    std::map<QString, std::vector<bili::FavoriteItem>> m_resources;
-    QString m_cookie;
-    size_t m_pendingFolderIndex = 0;
-    bool m_fetching = false;
+    class Impl;
+    std::unique_ptr<Impl> d;
 };
 
 } // namespace bili::gui

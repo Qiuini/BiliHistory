@@ -1,9 +1,9 @@
 #include "secrets_store.h"
 
 #include "crypto.h"
-#include "exceptions.h"
+#include "core/exceptions.h"
 #include "licensing/exceptions.h"
-#include "logger.h"
+#include "core/logger.h"
 #include "machine_id.h"
 
 #include <QDir>

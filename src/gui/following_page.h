@@ -1,14 +1,18 @@
 #pragma once
 
 #include <QFrame>
-#include <QGridLayout>
-#include <QScrollArea>
 #include <QWidget>
 
 #include "core/models.h"
-#include "image_loader.h"
+
+#include <memory>
+
+class QGridLayout;
+class QScrollArea;
 
 namespace bili::gui {
+
+class ImageLoader;
 
 class FollowingCard : public QFrame {
     Q_OBJECT
@@ -19,14 +23,15 @@ public:
 class FollowingPage : public QWidget {
     Q_OBJECT
 public:
-    explicit FollowingPage(QWidget* parent = nullptr);
+    // loader 由外部共享注入（典型来源：MainWindow::Impl 持有的单一 ImageLoader）。
+    explicit FollowingPage(ImageLoader* loader, QWidget* parent = nullptr);
+    ~FollowingPage() override;
+
     void loadData(const FollowingList& records);
 
 private:
-    QScrollArea* m_scroll = nullptr;
-    QWidget* m_container = nullptr;
-    QGridLayout* m_grid = nullptr;
-    ImageLoader* m_loader = nullptr;
+    class Impl;
+    std::unique_ptr<Impl> d;
 };
 
 } // namespace bili::gui

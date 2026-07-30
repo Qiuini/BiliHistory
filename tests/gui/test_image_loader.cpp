@@ -3,15 +3,31 @@
 #include <QApplication>
 #include <QColor>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QPainter>
 #include <QPixmap>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QUrl>
 
 #include "gui/image_loader.h"
 
 using namespace bili;
+
+namespace {
+
+// 等待 ImageLoader 工作线程把结果投递回 GUI 线程
+void waitForLoaded(gui::ImageLoader* loader)
+{
+    QEventLoop loop;
+    QObject::connect(loader, &gui::ImageLoader::loaded, &loop, &QEventLoop::quit);
+    QObject::connect(loader, &gui::ImageLoader::failed, &loop, &QEventLoop::quit);
+    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
+    loop.exec();
+}
+
+} // namespace
 
 class ImageLoaderTest : public ::testing::Test {
 protected:
@@ -47,7 +63,7 @@ TEST_F(ImageLoaderTest, memoryCacheHit) {
     const QString path = createImageFile(tempDir->path(), QStringLiteral("a.png"), Qt::red);
     int count = 0;
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
-    QApplication::processEvents();
+    waitForLoaded(loader.get());
     EXPECT_EQ(count, 1);
 
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
@@ -58,11 +74,12 @@ TEST_F(ImageLoaderTest, diskCacheRestore) {
     const QString path = createImageFile(tempDir->path(), QStringLiteral("b.png"), Qt::blue);
     int count = 0;
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
-    QApplication::processEvents();
+    waitForLoaded(loader.get());
     EXPECT_EQ(count, 1);
 
     loader->clearMemory();
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
+    waitForLoaded(loader.get());
     EXPECT_EQ(count, 2);
 }
 
@@ -73,7 +90,7 @@ TEST_F(ImageLoaderTest, lruEviction) {
                                           QColor::fromHsv((i * 17) % 360, 200, 200));
         bool called = false;
         loader->load(QUrl::fromLocalFile(p), [&called](const QPixmap&) { called = true; });
-        QApplication::processEvents();
+        waitForLoaded(loader.get());
         EXPECT_TRUE(called);
     }
     EXPECT_LE(loader->memoryCacheSize(), 200);
@@ -84,7 +101,7 @@ TEST_F(ImageLoaderTest, requestDeduplication) {
     int count = 0;
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
     loader->load(QUrl::fromLocalFile(path), [&count](const QPixmap&) { ++count; });
-    QApplication::processEvents();
+    waitForLoaded(loader.get());
     EXPECT_EQ(count, 2);
 }
 
@@ -100,7 +117,7 @@ TEST_F(ImageLoaderTest, failureHandling) {
     QObject::connect(loader.get(), &gui::ImageLoader::failed,
                      [&failCount](const QString&) { ++failCount; });
     loader->load(QUrl::fromLocalFile(invalid), [&callbackCount](const QPixmap&) { ++callbackCount; });
-    QApplication::processEvents();
+    waitForLoaded(loader.get());
 
     EXPECT_EQ(callbackCount, 0);
     EXPECT_EQ(failCount, 1);

@@ -6,6 +6,9 @@
 
 #include "business/fetch_worker.h"
 #include "config.h"
+#include "network/api_client.h"
+#include "network/fetchers.h"
+#include "network/http_client.h"
 #include "test_http_server.h"
 
 using namespace bili;
@@ -16,24 +19,36 @@ namespace {
 class FetchWorkerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        Config::instance().loadDefaults();
-        Config::instance().setValue(QStringLiteral("retry_wait_ms"), 50);
-        Config::instance().setValue(QStringLiteral("http_backoff_factor"), 0.5);
-        Config::instance().setValue(QStringLiteral("http_total_retries"), 1);
-        Config::instance().setValue(QStringLiteral("page_size"), 5);
+        m_config = std::make_unique<Config>();
+        m_config->loadDefaults();
+        m_config->setValue(QStringLiteral("retry_wait_ms"), 50);
+        m_config->setValue(QStringLiteral("http_backoff_factor"), 0.5);
+        m_config->setValue(QStringLiteral("http_total_retries"), 1);
+        m_config->setValue(QStringLiteral("page_size"), 5);
 
         m_server = std::make_unique<TestHttpServer>();
         ASSERT_TRUE(m_server->start());
 
         const QString base = QStringLiteral("http://127.0.0.1:%1").arg(m_server->serverPort());
-        Config::instance().setValue(QStringLiteral("base_url"), base);
+        m_config->setValue(QStringLiteral("base_url"), base);
     }
 
     void TearDown() override {
         m_worker.reset();
         m_server.reset();
+        m_config.reset();
     }
 
+    bili::business::HistoryFetcherFactory makeFactory() {
+        return [this](QObject* parent) -> bili::IHistoryFetcher* {
+            auto* httpClient = new bili::HttpClient(m_config.get());
+            auto* client = new bili::ApiClient(m_config.get(), httpClient, parent);
+            httpClient->setParent(client);
+            return new bili::HistoryFetcher(client, m_config.get(), parent);
+        };
+    }
+
+    std::unique_ptr<Config> m_config;
     std::unique_ptr<TestHttpServer> m_server;
     std::unique_ptr<FetchWorker> m_worker;
 };
@@ -60,7 +75,7 @@ TEST_F(FetchWorkerTest, EmitsStartedFinishedAndForwardsRecords) {
 
     m_server->enqueueResponse(200, page);
 
-    m_worker = std::make_unique<FetchWorker>();
+    m_worker = std::make_unique<FetchWorker>(m_config.get(), makeFactory());
 
     bool started = false;
     bool finished = false;
@@ -105,7 +120,7 @@ TEST_F(FetchWorkerTest, EmitsStartedFinishedAndForwardsRecords) {
 TEST_F(FetchWorkerTest, CancelFetchEmitsCancelled) {
     m_server->enqueueResponse(200, QByteArrayLiteral("{}"), 5000);
 
-    m_worker = std::make_unique<FetchWorker>();
+    m_worker = std::make_unique<FetchWorker>(m_config.get(), makeFactory());
 
     bool cancelled = false;
     QEventLoop loop;
@@ -127,7 +142,7 @@ TEST_F(FetchWorkerTest, CancelFetchEmitsCancelled) {
 }
 
 TEST_F(FetchWorkerTest, EmptyCookieEmitsError) {
-    m_worker = std::make_unique<FetchWorker>();
+    m_worker = std::make_unique<FetchWorker>(m_config.get(), makeFactory());
 
     bool errored = false;
     QString errorMessage;

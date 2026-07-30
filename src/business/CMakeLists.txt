@@ -1,15 +1,20 @@
 set(BUSINESS_SOURCES
     analytics.cpp
     exporter.cpp
+    filter.cpp
     updater.cpp
     fetch_worker.cpp
+    xlsx_writer.cpp
 )
 
 set(BUSINESS_HEADERS
     analytics.h
     exporter.h
+    filter.h
     updater.h
     fetch_worker.h
+    i_fetch_worker.h
+    xlsx_writer.h
 )
 
 add_library(BiliHistoryBusiness STATIC ${BUSINESS_SOURCES} ${BUSINESS_HEADERS})
@@ -27,4 +32,6 @@ target_link_libraries(BiliHistoryBusiness
     PRIVATE
         BiliHistoryCore
         BiliHistoryNetwork
+        miniz
+        Qt6::Gui
 )

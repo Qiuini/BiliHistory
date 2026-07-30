@@ -27,6 +27,9 @@ public:
     // 收藏夹内容
     static std::vector<FavoriteItem> parseFavoriteResources(const QJsonObject& data);
 
+    // 当前登录用户导航信息（用于获取自己的 mid/头像/等级等）
+    static UserInfo parseNavUserInfo(const QJsonObject& data);
+
     // 用户卡片
     static UserInfo parseUserCard(const QJsonObject& data);
 

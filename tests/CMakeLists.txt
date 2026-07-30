@@ -12,6 +12,7 @@ target_link_libraries(BiliHistoryTests
         BiliHistoryNetwork
         BiliHistoryBusiness
         BiliHistoryGui
+        miniz
         Qt6::Core
         Qt6::Network
         Qt6::Widgets

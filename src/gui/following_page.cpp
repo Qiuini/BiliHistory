@@ -1,12 +1,15 @@
 #include "following_page.h"
 
 #include "animation_utils.h"
+#include "image_loader.h"
 #include "theme.h"
 
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 namespace bili::gui {
@@ -139,30 +142,42 @@ FollowingCard::FollowingCard(const FollowingUser& user, ImageLoader* loader, QWi
     animation::installCardHoverAnimation(this, QColor(theme::SURFACE_HOVER));
 }
 
-FollowingPage::FollowingPage(QWidget* parent)
+class FollowingPage::Impl {
+public:
+    QScrollArea* scroll = nullptr;
+    QWidget* container = nullptr;
+    QGridLayout* grid = nullptr;
+    ImageLoader* loader = nullptr;
+};
+
+FollowingPage::FollowingPage(ImageLoader* loader, QWidget* parent)
     : QWidget(parent)
-    , m_loader(new ImageLoader(this))
+    , d(std::make_unique<Impl>())
 {
+    d->loader = loader;
+
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
-    m_scroll = new QScrollArea(this);
-    m_scroll->setWidgetResizable(true);
-    m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    d->scroll = new QScrollArea(this);
+    d->scroll->setWidgetResizable(true);
+    d->scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-    m_container = new QWidget(this);
-    m_grid = new QGridLayout(m_container);
-    m_grid->setContentsMargins(20, 20, 20, 20);
-    m_grid->setSpacing(16);
+    d->container = new QWidget(this);
+    d->grid = new QGridLayout(d->container);
+    d->grid->setContentsMargins(20, 20, 20, 20);
+    d->grid->setSpacing(16);
 
-    m_scroll->setWidget(m_container);
-    mainLayout->addWidget(m_scroll);
+    d->scroll->setWidget(d->container);
+    mainLayout->addWidget(d->scroll);
 }
+
+FollowingPage::~FollowingPage() = default;
 
 void FollowingPage::loadData(const FollowingList& records)
 {
     QLayoutItem* item = nullptr;
-    while ((item = m_grid->takeAt(0)) != nullptr) {
+    while ((item = d->grid->takeAt(0)) != nullptr) {
         if (item->widget()) {
             item->widget()->deleteLater();
         }
@@ -171,11 +186,11 @@ void FollowingPage::loadData(const FollowingList& records)
 
     constexpr int columns = 2;
     for (size_t i = 0; i < records.size(); ++i) {
-        auto* card = new FollowingCard(records[i], m_loader, m_container);
-        m_grid->addWidget(card, static_cast<int>(i) / columns, static_cast<int>(i) % columns);
+        auto* card = new FollowingCard(records[i], d->loader, d->container);
+        d->grid->addWidget(card, static_cast<int>(i) / columns, static_cast<int>(i) % columns);
     }
 
-    m_grid->setRowStretch(static_cast<int>(records.size()) / columns + 1, 1);
+    d->grid->setRowStretch(static_cast<int>(records.size()) / columns + 1, 1);
 }
 
 } // namespace bili::gui

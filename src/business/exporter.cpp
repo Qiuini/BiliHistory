@@ -1,5 +1,8 @@
 #include "exporter.h"
 
+#include "core/csv_parser.h"
+#include "xlsx_writer.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -7,7 +10,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QPageSize>
+#include <QPdfWriter>
+#include <QTextDocument>
 #include <QTextStream>
+
+#include <memory>
 
 namespace bili::business {
 
@@ -59,16 +67,6 @@ QStringList csvHeaderColumns()
     };
 }
 
-QString escapeCsvField(const QString& field)
-{
-    if (field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r')) {
-        QString escaped = field;
-        escaped.replace('"', QStringLiteral(""""));
-        return QStringLiteral("\"%1\"").arg(escaped);
-    }
-    return field;
-}
-
 QString recordToCsvRow(const RecordPtr& record)
 {
     if (!record) return QString();
@@ -76,45 +74,24 @@ QString recordToCsvRow(const RecordPtr& record)
     QStringList fields;
     fields << QString::number(CurrentSchemaVersion);
     fields << QString::number(record->id);
-    fields << escapeCsvField(recordTypeToString(record->type));
-    fields << escapeCsvField(record->category);
-    fields << escapeCsvField(record->title);
-    fields << escapeCsvField(record->authorName);
+    fields << CsvParser::escapeField(recordTypeToString(record->type));
+    fields << CsvParser::escapeField(record->category);
+    fields << CsvParser::escapeField(record->title);
+    fields << CsvParser::escapeField(record->authorName);
     fields << QString::number(record->authorId);
-    fields << escapeCsvField(record->viewAt.toString(Qt::ISODate));
-    fields << escapeCsvField(record->progress);
+    fields << CsvParser::escapeField(record->viewAt.toString(Qt::ISODate));
+    fields << CsvParser::escapeField(record->progress);
     fields << QString::number(record->progressPercent);
-    fields << escapeCsvField(record->bvid);
-    fields << escapeCsvField(record->coverUrl);
+    fields << CsvParser::escapeField(record->bvid);
+    fields << CsvParser::escapeField(record->coverUrl);
 
-    QString bvId, roomId, cvId;
-    qint64 cid = 0, duration = 0, liveId = 0, categoryId = 0;
-    QString liveStatus;
-
-    if (auto video = std::dynamic_pointer_cast<VideoRecord>(record)) {
-        bvId = video->bvId;
-        cid = video->cid;
-        duration = video->duration;
-    } else if (auto live = std::dynamic_pointer_cast<LiveRecord>(record)) {
-        roomId = live->roomId;
-        liveId = live->liveId;
-        liveStatus = live->liveStatus;
-    } else if (auto article = std::dynamic_pointer_cast<ArticleRecord>(record)) {
-        cvId = article->cvId;
-        categoryId = article->categoryId;
+    const QStringList derived = record->derivedCsvFields();
+    for (const QString& field : derived) {
+        fields << CsvParser::escapeField(field);
     }
+    fields << CsvParser::escapeField(record->rawJson);
 
-    fields << escapeCsvField(bvId);
-    fields << QString::number(cid);
-    fields << QString::number(duration);
-    fields << escapeCsvField(roomId);
-    fields << QString::number(liveId);
-    fields << escapeCsvField(liveStatus);
-    fields << escapeCsvField(cvId);
-    fields << QString::number(categoryId);
-    fields << escapeCsvField(record->rawJson);
-
-    return fields.join(',');
+    return CsvParser::joinFields(fields);
 }
 
 QVariantMap recordToExportMap(const RecordPtr& record)
@@ -122,20 +99,7 @@ QVariantMap recordToExportMap(const RecordPtr& record)
     if (!record) return {};
 
     QVariantMap map = record->toVariantMap();
-
-    if (auto video = std::dynamic_pointer_cast<VideoRecord>(record)) {
-        map[QStringLiteral("bv_id")] = video->bvId;
-        map[QStringLiteral("cid")] = video->cid;
-        map[QStringLiteral("duration")] = static_cast<qlonglong>(video->duration);
-    } else if (auto live = std::dynamic_pointer_cast<LiveRecord>(record)) {
-        map[QStringLiteral("room_id")] = live->roomId;
-        map[QStringLiteral("live_id")] = live->liveId;
-        map[QStringLiteral("live_status")] = live->liveStatus;
-    } else if (auto article = std::dynamic_pointer_cast<ArticleRecord>(record)) {
-        map[QStringLiteral("cv_id")] = article->cvId;
-        map[QStringLiteral("category_id")] = static_cast<qlonglong>(article->categoryId);
-    }
-
+    map.insert(record->derivedToVariantMap());
     map[QStringLiteral("raw_json")] = record->rawJson;
     return map;
 }
@@ -158,23 +122,84 @@ void ensureParentDir(const QString& filePath)
     }
 }
 
+QString recordHtmlCell(const RecordPtr& record, const QString& header)
+{
+    if (header == QStringLiteral("类型")) return escapeHtml(recordTypeToString(record->type));
+    if (header == QStringLiteral("标题")) return escapeHtml(record->title);
+    if (header == QStringLiteral("UP 主")) return escapeHtml(record->authorName);
+    if (header == QStringLiteral("分类")) return escapeHtml(record->category);
+    if (header == QStringLiteral("观看时间")) return escapeHtml(record->viewAt.toString(QStringLiteral("yyyy-MM-dd hh:mm")));
+    if (header == QStringLiteral("进度")) return QString::number(record->progressPercent);
+    if (header == QStringLiteral("BV 号")) return escapeHtml(record->bvid);
+    return QString();
+}
+
+QString buildHtmlTable(const RecordList& records, const QStringList& columns, const QString& style)
+{
+    QStringList rows;
+    rows.reserve(static_cast<int>(records.size()));
+    for (const auto& record : records) {
+        if (!record) continue;
+        QStringList cells;
+        for (const auto& header : columns) {
+            cells << QStringLiteral("<td>%1</td>").arg(recordHtmlCell(record, header));
+        }
+        rows << QStringLiteral("<tr>%1</tr>").arg(cells.join(QString()));
+    }
+
+    QStringList headerCells;
+    for (const auto& header : columns) {
+        headerCells << QStringLiteral("<th>%1</th>").arg(header);
+    }
+
+    return QStringLiteral(
+        "<!DOCTYPE html>"
+        "<html>"
+        "<head>"
+        "<meta charset=\"utf-8\">"
+        "<title>BiliHistory 导出</title>"
+        "<style>"
+        "%2"
+        "</style>"
+        "</head>"
+        "<body>"
+        "<h2>BiliHistory 历史记录导出</h2>"
+        "<p>共 %1 条记录</p>"
+        "<table>"
+        "<tr>%3</tr>"
+        "%4"
+        "</table>"
+        "</body>"
+        "</html>"
+    )
+        .arg(records.size())
+        .arg(style)
+        .arg(headerCells.join(QString()))
+        .arg(rows.join(QString()));
+}
+
+std::unique_ptr<QFile> openOutput(const QString& filePath, QIODevice::OpenMode mode, const QString& formatLabel)
+{
+    ensureParentDir(filePath);
+    auto file = std::make_unique<QFile>(filePath);
+    if (!file->open(mode)) {
+        throw ExportException(QStringLiteral("无法写入 %1 文件: %2").arg(formatLabel, filePath));
+    }
+    return file;
+}
+
 } // namespace
 
 QString exportCsv(const RecordList& records, const QString& filePath)
 {
-    ensureParentDir(filePath);
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        throw ExportException(QStringLiteral("无法写入 CSV 文件: %1").arg(filePath));
-    }
+    auto file = openOutput(filePath, QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate, QStringLiteral("CSV"));
 
     // UTF-8 BOM，提升 Excel 兼容性
-    file.write("\xEF\xBB\xBF");
+    file->write("\xEF\xBB\xBF");
 
-    QTextStream stream(&file);
+    QTextStream stream(file.get());
     stream.setEncoding(QStringConverter::Utf8);
-    stream << csvHeaderColumns().join(',') << "\n";
+    stream << CsvParser::joinFields(csvHeaderColumns()) << "\n";
 
     for (const auto& record : records) {
         stream << recordToCsvRow(record) << "\n";
@@ -186,8 +211,6 @@ QString exportCsv(const RecordList& records, const QString& filePath)
 
 QString exportJson(const RecordList& records, const QString& filePath)
 {
-    ensureParentDir(filePath);
-
     QJsonArray array;
     for (const auto& record : records) {
         array.append(QJsonObject::fromVariantMap(recordToExportMap(record)));
@@ -198,80 +221,36 @@ QString exportJson(const RecordList& records, const QString& filePath)
     root[QStringLiteral("count")] = static_cast<int>(records.size());
     root[QStringLiteral("records")] = array;
 
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        throw ExportException(QStringLiteral("无法写入 JSON 文件: %1").arg(filePath));
-    }
-
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    auto file = openOutput(filePath, QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate, QStringLiteral("JSON"));
+    file->write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     return filePath;
 }
 
 QString exportHtml(const RecordList& records, const QString& filePath)
 {
-    ensureParentDir(filePath);
-
-    QStringList rows;
-    rows.reserve(static_cast<int>(records.size()));
-    for (const auto& record : records) {
-        if (!record) continue;
-        rows.append(QStringLiteral(
-            "<tr>"
-            "<td>%1</td>"
-            "<td>%2</td>"
-            "<td>%3</td>"
-            "<td>%4</td>"
-            "<td>%5</td>"
-            "<td>%6</td>"
-            "</tr>"
-        )
-            .arg(escapeHtml(recordTypeToString(record->type)))
-            .arg(escapeHtml(record->title))
-            .arg(escapeHtml(record->authorName))
-            .arg(escapeHtml(record->category))
-            .arg(escapeHtml(record->viewAt.toString(QStringLiteral("yyyy-MM-dd hh:mm"))))
-            .arg(record->progressPercent));
-    }
-
-    const QString html = QStringLiteral(
-        "<!DOCTYPE html>"
-        "<html>"
-        "<head>"
-        "<meta charset=\"utf-8\">"
-        "<title>BiliHistory 导出</title>"
-        "<style>"
+    const QString style = QStringLiteral(
         "body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; background: #F7F6F9; }"
-        "table { width: 100%%; border-collapse: collapse; background: #FFFFFF; }"
+        "table { width: 100%; border-collapse: collapse; background: #FFFFFF; }"
         "th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #EBE8EF; }"
         "th { background: #FAFAFD; font-weight: 600; }"
-        "</style>"
-        "</head>"
-        "<body>"
-        "<h2>BiliHistory 历史记录导出</h2>"
-        "<p>共 %1 条记录</p>"
-        "<table>"
-        "<tr><th>类型</th><th>标题</th><th>UP 主</th><th>分类</th><th>观看时间</th><th>进度</th></tr>"
-        "%2"
-        "</table>"
-        "</body>"
-        "</html>"
-    )
-        .arg(records.size())
-        .arg(rows.join(QString()));
+    );
+    const QStringList columns = {
+        QStringLiteral("类型"),
+        QStringLiteral("标题"),
+        QStringLiteral("UP 主"),
+        QStringLiteral("分类"),
+        QStringLiteral("观看时间"),
+        QStringLiteral("进度"),
+    };
+    const QString html = buildHtmlTable(records, columns, style);
 
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        throw ExportException(QStringLiteral("无法写入 HTML 文件: %1").arg(filePath));
-    }
-
-    file.write(html.toUtf8());
+    auto file = openOutput(filePath, QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate, QStringLiteral("HTML"));
+    file->write(html.toUtf8());
     return filePath;
 }
 
 QString exportMarkdown(const RecordList& records, const QString& filePath)
 {
-    ensureParentDir(filePath);
-
     QString content;
     content.append(QStringLiteral("# BiliHistory 历史记录导出\n\n"));
     content.append(QStringLiteral("共 %1 条记录\n\n").arg(records.size()));
@@ -288,12 +267,39 @@ QString exportMarkdown(const RecordList& records, const QString& filePath)
                            .arg(record->progressPercent));
     }
 
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        throw ExportException(QStringLiteral("无法写入 Markdown 文件: %1").arg(filePath));
-    }
+    auto file = openOutput(filePath, QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate, QStringLiteral("Markdown"));
+    file->write(content.toUtf8());
+    return filePath;
+}
 
-    file.write(content.toUtf8());
+QString exportPdf(const RecordList& records, const QString& filePath)
+{
+    ensureParentDir(filePath);
+
+    const QString style = QStringLiteral(
+        "body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; background: #FFFFFF; }"
+        "table { width: 100%; border-collapse: collapse; }"
+        "th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #EBE8EF; font-size: 10px; }"
+        "th { background: #FAFAFD; font-weight: 600; }"
+    );
+    const QStringList columns = {
+        QStringLiteral("类型"),
+        QStringLiteral("分类"),
+        QStringLiteral("标题"),
+        QStringLiteral("UP 主"),
+        QStringLiteral("观看时间"),
+        QStringLiteral("进度"),
+        QStringLiteral("BV 号"),
+    };
+    const QString html = buildHtmlTable(records, columns, style);
+
+    QPdfWriter writer(filePath);
+    writer.setPageSize(QPageSize::A4);
+    writer.setPageMargins(QMarginsF(20, 20, 20, 20), QPageLayout::Millimeter);
+
+    QTextDocument doc;
+    doc.setHtml(html);
+    doc.print(&writer);
     return filePath;
 }
 
@@ -302,6 +308,9 @@ QString exportRecords(const RecordList& records, const QString& filePath)
     const QString suffix = QFileInfo(filePath).suffix().toLower();
     if (suffix == QStringLiteral("csv")) {
         return exportCsv(records, filePath);
+    }
+    if (suffix == QStringLiteral("xlsx")) {
+        return exportXlsx(records, filePath);
     }
     if (suffix == QStringLiteral("json")) {
         return exportJson(records, filePath);
@@ -312,13 +321,18 @@ QString exportRecords(const RecordList& records, const QString& filePath)
     if (suffix == QStringLiteral("md")) {
         return exportMarkdown(records, filePath);
     }
+    if (suffix == QStringLiteral("pdf")) {
+        return exportPdf(records, filePath);
+    }
     throw ExportException(QStringLiteral("不支持的导出格式: %1").arg(suffix));
 }
 
 QString supportedFilters()
 {
     return QStringLiteral(
+        "Excel 工作簿 (*.xlsx);;"
         "CSV 表格 (*.csv);;"
+        "PDF 文档 (*.pdf);;"
         "JSON 数据 (*.json);;"
         "HTML 网页 (*.html);;"
         "Markdown 文档 (*.md);;"

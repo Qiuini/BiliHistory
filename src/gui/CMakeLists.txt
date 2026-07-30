@@ -10,6 +10,8 @@ set(GUI_SOURCES
     activation_dialog.cpp
     trial_expired_dialog.cpp
     stats_page.cpp
+    profile_page.cpp
+    filter_dialog.cpp
 )
 
 set(GUI_HEADERS
@@ -24,6 +26,8 @@ set(GUI_HEADERS
     activation_dialog.h
     trial_expired_dialog.h
     stats_page.h
+    profile_page.h
+    filter_dialog.h
 )
 
 add_library(BiliHistoryGui STATIC ${GUI_SOURCES} ${GUI_HEADERS})

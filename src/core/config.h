@@ -1,4 +1,6 @@
-#pragma once
+﻿#pragma once
+
+#include "i_config.h"
 
 #include <QJsonObject>
 #include <QJsonValue>
@@ -7,9 +9,11 @@
 
 namespace bili {
 
-class Config {
+// 配置类：可独立构造，由调用方（main / 测试）持有所有权并通过 IConfig* 注入。
+// 不提供全局单例，避免可变全局状态污染测试与依赖图。
+class Config : public IConfig {
 public:
-    static Config& instance();
+    Config() = default;
 
     bool loadDefaults();
     bool loadFromFile(const QString& path);
@@ -28,6 +32,14 @@ public:
 
     int pageSize() const;
     bool fetchAll() const;
+    void setFetchAll(bool fetchAll);
+
+    int fetchHistoryDelayBaseMs() const;
+    int fetchHistoryDelayJitterMs() const;
+    int fetchListDelayBaseMs() const;
+    int fetchListDelayJitterMs() const;
+    int followingPageSize() const;
+    int favoritesPageSize() const;
 
     int httpTotalRetries() const;
     double httpBackoffFactor() const;
@@ -43,8 +55,6 @@ public:
     void setSecretsPath(const QString& path);
 
 private:
-    Config() = default;
-
     QString m_secretsPath;
 
     QJsonObject m_root;

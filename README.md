@@ -1,6 +1,6 @@
 # BiliHistory —— B站历史记录管理工具
 
-[![C++](https://img.shields.io/badge/C%2B%2B-17-blue)](https://isocpp.org/)
+[![C++](https://img.shields.io/badge/C%2B%2B-20-blue)](https://isocpp.org/)
 [![Qt6](https://img.shields.io/badge/GUI-Qt6_Widgets-green)](https://www.qt.io/)
 [![CMake](https://img.shields.io/badge/Build-CMake-orange)](https://cmake.org/)
 [![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
@@ -75,9 +75,10 @@ BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管�
 
 ## 技术栈
 
-- **C++17**
+- **C++20**
 - **Qt6 Widgets** —— 跨平台桌面 GUI
 - **Qt6 Network** —— HTTP 请求与网络层
+- **C++20 协程异步架构** —— `src/network/coro/` 下 Task / CancellationToken / NetworkAwaitable / SleepAwaitable，基于 `co_await` 的非阻塞网络与定时器调度
 - **OpenSSL 3.x** —— 授权加密与密钥管理
 - **GoogleTest** —— 单元测试
 - **CMake 3.21+** —— 构建系统
@@ -90,9 +91,10 @@ BiliHistory 是一款面向 Windows 与 Linux 的 B站历史记录本地化管�
 
 ```text
 HistoryofBilibili/
-├── src/                      # C++17 + Qt6 完整实现
+├── src/                      # C++20 + Qt6 完整实现
 │   ├── core/                 # 核心层：配置、数据模型、CSV 存储、解析、日志、路径
 │   ├── network/              # 网络层：HTTP 客户端、API 客户端、数据抓取器
+│   │   └── coro/             # 协程基础设施：task.h, cancellation_token.h, network_awaitable.h, timer_awaitable.h
 │   ├── business/             # 业务层：抓取工作线程、统计分析、导出、更新检查
 │   ├── licensing/            # 授权层：试用、激活、机器码、加密
 │   ├── gui/                  # 表示层：主窗口、表格模型、各页面、弹窗、主题
@@ -142,7 +144,7 @@ HistoryofBilibili/
 ### 环境要求
 
 - CMake 3.21+
-- C++17 编译器（MSVC / GCC / Clang）
+- C++20 编译器（MSVC / GCC / Clang，需支持协程）
 - [vcpkg](https://vcpkg.io/)（manifest 模式，自动安装 Qt6、OpenSSL、GTest）
 
 ### 1. 克隆项目

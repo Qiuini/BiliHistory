@@ -25,12 +25,14 @@ protected:
 
         m_keypair = generateRsaKeypair();
         const QByteArray pubPem = exportPublicKey(m_keypair);
-        LicenseManager::setPublicKeyForTest(pubPem);
+        // 注入临时公钥 + 固定机器码，避免依赖真实机器码
+        m_manager = std::make_unique<LicenseManager>(pubPem,
+            []() { return QStringLiteral("test-machine-id"); });
     }
 
     void TearDown() override
     {
-        LicenseManager::setPublicKeyForTest(QByteArray());
+        m_manager.reset();
         if (m_keypair) {
             EVP_PKEY_free(m_keypair);
             m_keypair = nullptr;
@@ -103,6 +105,7 @@ private:
 
 public:
     QString m_licensePath;
+    std::unique_ptr<LicenseManager> m_manager;
 };
 
 } // namespace
@@ -110,7 +113,7 @@ public:
 TEST_F(LicenseTest, ValidCodeVerifies)
 {
     const QString code = makeCode(QStringLiteral("buyout"));
-    const auto info = LicenseManager::verifyCode(code);
+    const auto info = m_manager->verifyCode(code);
     ASSERT_TRUE(info.has_value());
     EXPECT_EQ(info->typ, QStringLiteral("buyout"));
     EXPECT_TRUE(info->isBuyout());
@@ -121,29 +124,38 @@ TEST_F(LicenseTest, TamperedCodeRejected)
 {
     QString code = makeCode(QStringLiteral("buyout"));
     code = code.left(code.size() - 3) + (code.endsWith(QStringLiteral("aaa")) ? QStringLiteral("bbb") : QStringLiteral("aaa"));
-    EXPECT_FALSE(LicenseManager::verifyCode(code).has_value());
+    EXPECT_FALSE(m_manager->verifyCode(code).has_value());
 }
 
 TEST_F(LicenseTest, ExpiredCodeRejected)
 {
     const qint64 expired = QDateTime::currentDateTimeUtc().addSecs(-10).toSecsSinceEpoch();
     const QString code = makeCode(QStringLiteral("month"), expired);
-    EXPECT_FALSE(LicenseManager::verifyCode(code).has_value());
+    EXPECT_FALSE(m_manager->verifyCode(code).has_value());
 }
 
 TEST_F(LicenseTest, MachineBoundMismatchRejected)
 {
+    // 注入的 machineIdProvider 返回 "test-machine-id"，绑定到别的机器码应被拒绝
     const QString code = makeCode(QStringLiteral("buyout"), -1, QStringLiteral("deadbeefdeadbeef"));
-    EXPECT_TRUE(LicenseManager::verifyCode(code).has_value());
-    EXPECT_FALSE(LicenseManager::activate(code, m_licensePath).has_value());
-    EXPECT_FALSE(LicenseManager::currentLicense(m_licensePath).has_value());
+    EXPECT_TRUE(m_manager->verifyCode(code).has_value());
+    EXPECT_FALSE(m_manager->activate(code, m_licensePath).has_value());
+    EXPECT_FALSE(m_manager->currentLicense(m_licensePath).has_value());
+}
+
+TEST_F(LicenseTest, MachineBoundMatchAccepted)
+{
+    // 新增：机器码匹配时应成功激活
+    const QString code = makeCode(QStringLiteral("buyout"), -1, QStringLiteral("test-machine-id"));
+    ASSERT_TRUE(m_manager->activate(code, m_licensePath).has_value());
+    EXPECT_TRUE(m_manager->currentLicense(m_licensePath).has_value());
 }
 
 TEST_F(LicenseTest, ActivateAndPersist)
 {
     const QString code = makeCode(QStringLiteral("buyout"));
-    EXPECT_FALSE(LicenseManager::isLicensed(m_licensePath));
-    ASSERT_TRUE(LicenseManager::activate(code, m_licensePath).has_value());
-    EXPECT_TRUE(LicenseManager::isLicensed(m_licensePath));
-    EXPECT_TRUE(LicenseManager::currentLicense(m_licensePath).has_value());
+    EXPECT_FALSE(m_manager->isLicensed(m_licensePath));
+    ASSERT_TRUE(m_manager->activate(code, m_licensePath).has_value());
+    EXPECT_TRUE(m_manager->isLicensed(m_licensePath));
+    EXPECT_TRUE(m_manager->currentLicense(m_licensePath).has_value());
 }

@@ -1,9 +1,14 @@
 cmake_minimum_required(VERSION 3.21)
-project(BiliHistory VERSION 1.0.12 LANGUAGES CXX)
+project(BiliHistory VERSION 2.0.0 LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# MSVC 需要显式启用协程支持（/await 在 C++20 模式下）
+if(MSVC)
+    add_compile_options(/await)
+endif()
 
 # 统一输出目录
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -15,7 +20,10 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Network Widgets)
+
+# 第三方依赖
+add_subdirectory(third_party/miniz)
 
 # Phase 3 授权加密层强制依赖 OpenSSL 3.x
 # 优先使用 vcpkg 提供的 OpenSSL，避免系统/Strawberry 等冲突版本
@@ -77,6 +85,7 @@ add_subdirectory(src/gui)
 
 # 主程序入口（Phase 5 完整实现）
 add_executable(BiliHistory src/main.cpp)
+target_compile_features(BiliHistory PRIVATE cxx_std_20)
 target_link_libraries(BiliHistory PRIVATE BiliHistoryCore BiliHistoryNetwork BiliHistoryBusiness BiliHistoryGui Qt6::Core Qt6::Widgets)
 
 # Windows：部署 Qt / OpenSSL DLL 到可执行文件目录，便于 CPack 打包

@@ -1,4 +1,5 @@
 #include "csv_storage.h"
+#include "csv_parser.h"
 #include "exceptions.h"
 #include "logger.h"
 
@@ -14,22 +15,37 @@ namespace {
 
 constexpr int CurrentSchemaVersion = 1;
 
+// 列名常量，避免拼写错误扩散到多处
+const QString kColSchemaVersion = QStringLiteral("schema_version");
+const QString kColId            = QStringLiteral("id");
+const QString kColType          = QStringLiteral("type");
+const QString kColCategory      = QStringLiteral("category");
+const QString kColTitle         = QStringLiteral("title");
+const QString kColAuthorName    = QStringLiteral("author_name");
+const QString kColAuthorId      = QStringLiteral("author_id");
+const QString kColViewAt        = QStringLiteral("view_at");
+const QString kColProgress      = QStringLiteral("progress");
+const QString kColProgressPct   = QStringLiteral("progress_percent");
+const QString kColBvid          = QStringLiteral("bvid");
+const QString kColCoverUrl      = QStringLiteral("cover_url");
+const QString kColRawJson       = QStringLiteral("raw_json");
+
 } // namespace
 
 QStringList CsvStorage::headerColumns() {
     return {
-        QStringLiteral("schema_version"),
-        QStringLiteral("id"),
-        QStringLiteral("type"),
-        QStringLiteral("category"),
-        QStringLiteral("title"),
-        QStringLiteral("author_name"),
-        QStringLiteral("author_id"),
-        QStringLiteral("view_at"),
-        QStringLiteral("progress"),
-        QStringLiteral("progress_percent"),
-        QStringLiteral("bvid"),
-        QStringLiteral("cover_url"),
+        kColSchemaVersion,
+        kColId,
+        kColType,
+        kColCategory,
+        kColTitle,
+        kColAuthorName,
+        kColAuthorId,
+        kColViewAt,
+        kColProgress,
+        kColProgressPct,
+        kColBvid,
+        kColCoverUrl,
         // 派生类字段
         QStringLiteral("bv_id"),
         QStringLiteral("cid"),
@@ -39,12 +55,27 @@ QStringList CsvStorage::headerColumns() {
         QStringLiteral("live_status"),
         QStringLiteral("cv_id"),
         QStringLiteral("category_id"),
-        QStringLiteral("raw_json")
+        kColRawJson
+    };
+}
+
+QStringList CsvStorage::derivedColumnNames() {
+    return {
+        QStringLiteral("bv_id"),
+        QStringLiteral("cid"),
+        QStringLiteral("duration"),
+        QStringLiteral("room_id"),
+        QStringLiteral("live_id"),
+        QStringLiteral("live_status"),
+        QStringLiteral("cv_id"),
+        QStringLiteral("category_id")
     };
 }
 
 CsvLoadResult CsvStorage::load(const QString& filePath) {
     CsvLoadResult result;
+    const CsvParser parser;
+    const QStringList expectedHeader = headerColumns();
 
     QFile file(filePath);
     if (!file.exists()) {
@@ -56,32 +87,55 @@ CsvLoadResult CsvStorage::load(const QString& filePath) {
 
     QTextStream stream(&file);
 
+    // 列名 → 下标 索引：默认按 headerColumns() 顺序，遇到真实表头则用真实表头覆盖
+    QHash<QString, int> index;
+    const int expectedSize = expectedHeader.size();
+    index.reserve(expectedSize);
+    for (int i = 0; i < expectedSize; ++i) {
+        index.insert(expectedHeader[i], i);
+    }
+
     bool headerRead = false;
-    const QStringList expectedHeader = headerColumns();
+    bool hasHeader = false;
 
     while (!stream.atEnd()) {
         const QString line = stream.readLine();
         if (line.trimmed().isEmpty()) continue;
 
         ++result.rowCount;
-        const QStringList fields = splitCsvLine(line);
+        const QStringList fields = parser.parseLine(line);
 
         if (!headerRead) {
             headerRead = true;
-            if (fields.size() >= 1 && fields.first() == expectedHeader.first()) {
-                continue; // 跳过表头
+            if (parser.looksLikeHeader(fields, expectedHeader)) {
+                hasHeader = true;
+                // 用真实表头重建索引：列顺序变更/新增列也能正确解析
+                index.clear();
+                for (int i = 0; i < fields.size(); ++i) {
+                    index.insert(fields[i], i);
+                }
+                // 表头里的 schema_version
+                const auto it = index.find(kColSchemaVersion);
+                if (it != index.end()) {
+                    bool ok = false;
+                    const int v = fields.value(it.value()).toInt(&ok);
+                    if (ok && v > 0) result.schemaVersion = v;
+                }
+                continue;
             }
-            // 无表头，尝试解析这一行
+            // 无表头，使用默认索引解析这一行
         }
 
-        if (fields.size() != expectedHeader.size()) {
+        // 字段数过少直接跳过；字段数多于表头也允许（多余列忽略）
+        const int minRequired = hasHeader ? index.size() : expectedSize;
+        if (fields.size() < minRequired) {
             ++result.errorCount;
             Logger::warning(QStringLiteral("CSV malformed row %1, skipped").arg(result.rowCount));
             continue;
         }
 
         try {
-            RecordPtr record = rowToRecord(fields);
+            RecordPtr record = rowToRecord(fields, index);
             if (record) {
                 result.records.push_back(record);
             }
@@ -108,7 +162,7 @@ bool CsvStorage::save(const QString& filePath, const RecordList& records) {
 
     QTextStream stream(&file);
 
-    stream << headerColumns().join(',') << "\n";
+    stream << CsvParser::joinFields(headerColumns()) << "\n";
     for (const auto& record : records) {
         stream << recordToRow(record) << "\n";
     }
@@ -135,128 +189,86 @@ QString CsvStorage::recordToRow(const RecordPtr& record) {
     QStringList fields;
     fields << QString::number(CurrentSchemaVersion);
     fields << QString::number(record->id);
-    fields << escapeCsvField(recordTypeToString(record->type));
-    fields << escapeCsvField(record->category);
-    fields << escapeCsvField(record->title);
-    fields << escapeCsvField(record->authorName);
+    fields << CsvParser::escapeField(recordTypeToString(record->type));
+    fields << CsvParser::escapeField(record->category);
+    fields << CsvParser::escapeField(record->title);
+    fields << CsvParser::escapeField(record->authorName);
     fields << QString::number(record->authorId);
-    fields << escapeCsvField(record->viewAt.toString(Qt::ISODate));
-    fields << escapeCsvField(record->progress);
+    fields << CsvParser::escapeField(record->viewAt.toString(Qt::ISODate));
+    fields << CsvParser::escapeField(record->progress);
     fields << QString::number(record->progressPercent);
-    fields << escapeCsvField(record->bvid);
-    fields << escapeCsvField(record->coverUrl);
+    fields << CsvParser::escapeField(record->bvid);
+    fields << CsvParser::escapeField(record->coverUrl);
 
-    // 派生类字段
-    QString bvId, roomId, cvId;
-    qint64 cid = 0, duration = 0, liveId = 0, categoryId = 0;
-    QString liveStatus;
-
-    if (auto video = std::dynamic_pointer_cast<VideoRecord>(record)) {
-        bvId = video->bvId;
-        cid = video->cid;
-        duration = video->duration;
-    } else if (auto live = std::dynamic_pointer_cast<LiveRecord>(record)) {
-        roomId = live->roomId;
-        liveId = live->liveId;
-        liveStatus = live->liveStatus;
-    } else if (auto article = std::dynamic_pointer_cast<ArticleRecord>(record)) {
-        cvId = article->cvId;
-        categoryId = article->categoryId;
+    // 派生类字段通过虚函数获取，避免 dynamic_pointer_cast
+    const QStringList derived = record->derivedCsvFields();
+    for (const QString& field : derived) {
+        fields << CsvParser::escapeField(field);
     }
+    fields << CsvParser::escapeField(record->rawJson);
 
-    fields << escapeCsvField(bvId);
-    fields << QString::number(cid);
-    fields << QString::number(duration);
-    fields << escapeCsvField(roomId);
-    fields << QString::number(liveId);
-    fields << escapeCsvField(liveStatus);
-    fields << escapeCsvField(cvId);
-    fields << QString::number(categoryId);
-    fields << escapeCsvField(record->rawJson);
-
-    return fields.join(',');
+    return CsvParser::joinFields(fields);
 }
 
-RecordPtr CsvStorage::rowToRecord(const QStringList& row) {
-    const RecordType type = recordTypeFromString(row[2]);
+namespace {
+
+// 从 fields 中按列名安全取值，列缺失返回空字符串
+QString columnValue(const QStringList& fields, const QHash<QString, int>& index, const QString& name) {
+    const auto it = index.find(name);
+    if (it == index.end()) return QString();
+    const int pos = it.value();
+    if (pos < 0 || pos >= fields.size()) return QString();
+    return fields.at(pos);
+}
+
+qint64 columnLongLong(const QStringList& fields, const QHash<QString, int>& index, const QString& name) {
+    return columnValue(fields, index, name).toLongLong();
+}
+
+int columnInt(const QStringList& fields, const QHash<QString, int>& index, const QString& name, int defaultValue = 0) {
+    const QString v = columnValue(fields, index, name);
+    bool ok = false;
+    const int n = v.toInt(&ok);
+    return ok ? n : defaultValue;
+}
+
+} // namespace
+
+RecordPtr CsvStorage::rowToRecord(const QStringList& row, const QHash<QString, int>& index) {
+    const QString typeStr = columnValue(row, index, kColType);
+    const RecordType type = recordTypeFromString(typeStr);
 
     RecordPtr record;
     switch (type) {
-        case RecordType::Video: {
-            auto video = std::make_shared<VideoRecord>();
-            video->bvId = row[12];
-            video->cid = row[13].toLongLong();
-            video->duration = row[14].toLongLong();
-            record = video;
-            break;
-        }
-        case RecordType::Live: {
-            auto live = std::make_shared<LiveRecord>();
-            live->roomId = row[15];
-            live->liveId = row[16].toLongLong();
-            live->liveStatus = row[17];
-            record = live;
-            break;
-        }
-        case RecordType::Article: {
-            auto article = std::make_shared<ArticleRecord>();
-            article->cvId = row[18];
-            article->categoryId = row[19].toLongLong();
-            record = article;
-            break;
-        }
-        default:
-            return nullptr;
+        case RecordType::Video:   record = std::make_shared<VideoRecord>(); break;
+        case RecordType::Live:    record = std::make_shared<LiveRecord>(); break;
+        case RecordType::Article: record = std::make_shared<ArticleRecord>(); break;
+        default: return nullptr;
     }
 
-    record->id = row[1].toLongLong();
-    record->type = type;
-    record->category = row[3];
-    record->title = row[4];
-    record->authorName = row[5];
-    record->authorId = row[6].toLongLong();
-    record->viewAt = QDateTime::fromString(row[7], Qt::ISODate);
-    record->progress = row[8];
-    record->progressPercent = row[9].toInt();
-    record->bvid = row[10];
-    record->coverUrl = row[11];
-    record->rawJson = row[20];
+    record->id            = columnLongLong(row, index, kColId);
+    record->type          = type;
+    record->category      = columnValue(row, index, kColCategory);
+    record->title         = columnValue(row, index, kColTitle);
+    record->authorName    = columnValue(row, index, kColAuthorName);
+    record->authorId      = columnLongLong(row, index, kColAuthorId);
+    record->viewAt        = QDateTime::fromString(columnValue(row, index, kColViewAt), Qt::ISODate);
+    record->progress      = columnValue(row, index, kColProgress);
+    record->progressPercent = columnInt(row, index, kColProgressPct);
+    record->bvid          = columnValue(row, index, kColBvid);
+    record->coverUrl      = columnValue(row, index, kColCoverUrl);
+    record->rawJson       = columnValue(row, index, kColRawJson);
+
+    // 按派生列名顺序提取子列表，传给 BaseRecord::applyDerivedCsvFields
+    const QStringList derivedNames = derivedColumnNames();
+    QStringList derivedFields;
+    derivedFields.reserve(derivedNames.size());
+    for (const QString& name : derivedNames) {
+        derivedFields.append(columnValue(row, index, name));
+    }
+    record->applyDerivedCsvFields(derivedFields);
 
     return record;
-}
-
-QString CsvStorage::escapeCsvField(const QString& field) {
-    if (field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r')) {
-        QString escaped = field;
-        escaped.replace('"', QStringLiteral("\"\""));
-        return QStringLiteral("\"%1\"").arg(escaped);
-    }
-    return field;
-}
-
-QStringList CsvStorage::splitCsvLine(const QString& line) {
-    QStringList result;
-    QString current;
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.size(); ++i) {
-        const QChar c = line[i];
-        if (c == '"') {
-            if (inQuotes && i + 1 < line.size() && line[i + 1] == '"') {
-                current.append('"');
-                ++i;
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (c == ',' && !inQuotes) {
-            result.append(current);
-            current.clear();
-        } else {
-            current.append(c);
-        }
-    }
-    result.append(current);
-    return result;
 }
 
 } // namespace bili

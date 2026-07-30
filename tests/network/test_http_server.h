@@ -7,6 +7,8 @@
 #include <QList>
 #include <QPointer>
 
+// 用于 HttpClient 单元测试的本地 mock HTTP 服务器。
+// 支持：排队响应、延迟、状态码、请求计数、记录最近一次 method/path/body。
 class TestHttpServer : public QTcpServer {
     Q_OBJECT
 public:
@@ -45,32 +47,54 @@ public:
         return m_lastPath;
     }
 
+    QByteArray lastMethod() const {
+        return m_lastMethod;
+    }
+
+    QByteArray lastBody() const {
+        return m_lastBody;
+    }
+
 protected:
     void incomingConnection(qintptr handle) override {
         auto socket = new QTcpSocket(this);
         socket->setSocketDescriptor(handle);
 
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-            if (!socket->canReadLine()) {
-                return;
-            }
-
+            // 读取请求行 + 头部
             QByteArray firstLine;
+            int contentLength = 0;
             while (socket->canReadLine()) {
                 const QByteArray line = socket->readLine();
                 if (firstLine.isEmpty()) {
                     firstLine = line;
+                }
+                // 解析 Content-Length 以便读取 body
+                if (line.toLower().startsWith("content-length:")) {
+                    const QByteArray value = line.mid(15).trimmed();
+                    contentLength = value.toInt();
                 }
                 if (line == "\r\n" || line == "\n") {
                     break;
                 }
             }
 
+            // 读取 body（如果存在）
+            QByteArray body;
+            if (contentLength > 0) {
+                while (socket->bytesAvailable() < contentLength) {
+                    socket->waitForReadyRead(50);
+                }
+                body = socket->read(contentLength);
+            }
+
             ++m_requestCount;
             const QList<QByteArray> parts = firstLine.split(' ');
             if (parts.size() >= 2) {
+                m_lastMethod = parts[0].trimmed();
                 m_lastPath = parts[1];
             }
+            m_lastBody = body;
 
             Response resp;
             if (!m_responses.isEmpty()) {
@@ -82,6 +106,7 @@ protected:
 
             const QByteArray statusText = (resp.statusCode == 200) ? "OK"
                                       : (resp.statusCode == 401) ? "Unauthorized"
+                                      : (resp.statusCode == 403) ? "Forbidden"
                                       : (resp.statusCode == 500) ? "Internal Server Error"
                                       : "Unknown";
             const QByteArray header = QByteArrayLiteral("HTTP/1.1 ")
@@ -114,4 +139,6 @@ private:
     QList<Response> m_responses;
     int m_requestCount = 0;
     QByteArray m_lastPath;
+    QByteArray m_lastMethod;
+    QByteArray m_lastBody;
 };

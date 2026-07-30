@@ -2,6 +2,7 @@
 
 #include "activation_dialog.h"
 #include "theme.h"
+#include "licensing/i_license_manager.h"
 
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -10,14 +11,23 @@
 
 namespace bili::gui {
 
-TrialExpiredDialog::TrialExpiredDialog(QWidget* parent)
+class TrialExpiredDialog::Impl {
+public:
+    ILicenseManager* licenseManager = nullptr;
+};
+
+TrialExpiredDialog::TrialExpiredDialog(bili::ILicenseManager& licenseManager, QWidget* parent)
     : QDialog(parent)
+    , d(std::make_unique<Impl>())
 {
+    d->licenseManager = &licenseManager;
     setWindowTitle(QStringLiteral("试用已到期"));
     setMinimumWidth(420);
     setFixedWidth(420);
     buildUi();
 }
+
+TrialExpiredDialog::~TrialExpiredDialog() = default;
 
 void TrialExpiredDialog::buildUi()
 {
@@ -64,7 +74,7 @@ void TrialExpiredDialog::buildUi()
 
 void TrialExpiredDialog::onActivate()
 {
-    ActivationDialog dialog(this);
+    ActivationDialog dialog(*d->licenseManager, this);
     if (dialog.exec() == QDialog::Accepted) {
         accept();
     }

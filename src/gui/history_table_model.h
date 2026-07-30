@@ -3,6 +3,8 @@
 #include <QAbstractTableModel>
 #include <QSet>
 
+#include <memory>
+
 #include "core/models.h"
 
 namespace bili::gui {
@@ -21,6 +23,7 @@ public:
     Q_ENUM(Roles)
 
     explicit HistoryTableModel(QObject* parent = nullptr);
+    ~HistoryTableModel() override;
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     int columnCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -33,9 +36,8 @@ public:
     void setHoverRow(int row);
 
 private:
-    RecordList m_rows;
-    QSet<QString> m_newIds;
-    int m_hoverRow = -1;
+    class Impl;
+    std::unique_ptr<Impl> d;
 };
 
 } // namespace bili::gui

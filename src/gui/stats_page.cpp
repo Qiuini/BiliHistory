@@ -71,13 +71,94 @@ void clearLayout(QLayout* layout)
     }
 }
 
+QWidget* addBarRow(QWidget* parent,
+                   QLayout* layout,
+                   const QString& label,
+                   int value,
+                   int maxValue,
+                   const QString& barColor,
+                   bool showValue = false,
+                   int labelWidth = 0)
+{
+    auto* row = new QWidget(parent);
+    auto* rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(8);
+
+    auto* labelWidget = new QLabel(label, row);
+    labelWidget->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; border: none; background: transparent;").arg(theme::TEXT));
+    if (labelWidth > 0) {
+        labelWidget->setFixedWidth(labelWidth);
+    }
+    labelWidget->setWordWrap(true);
+    rowLayout->addWidget(labelWidget, 1);
+
+    auto* bar = new QProgressBar(row);
+    bar->setRange(0, maxValue);
+    bar->setValue(value);
+    if (showValue) {
+        bar->setFormat(QStringLiteral("%v"));
+        bar->setAlignment(Qt::AlignCenter);
+        bar->setFixedHeight(14);
+        bar->setStyleSheet(QStringLiteral(
+            "QProgressBar { border: none; background-color: %1; border-radius: 7px; color: %2; font-size: 10px; }"
+            "QProgressBar::chunk { background-color: %3; border-radius: 7px; }"
+        ).arg(theme::SURFACE_HOVER, theme::TEXT, barColor));
+    } else {
+        bar->setTextVisible(false);
+        bar->setFixedHeight(6);
+        bar->setStyleSheet(QStringLiteral(
+            "QProgressBar { border: none; background-color: %1; border-radius: 3px; }"
+            "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
+        ).arg(theme::SURFACE_HOVER, barColor));
+    }
+    rowLayout->addWidget(bar, showValue ? 1 : 0);
+
+    layout->addWidget(row);
+    return row;
+}
+
+void updateTrendBars(QWidget* container, const QVariantList& trend, const QString& barColor)
+{
+    auto* layout = container->layout();
+    clearLayout(layout);
+
+    int maxCount = 1;
+    for (const auto& item : trend) {
+        const int count = item.toMap().value(QStringLiteral("count")).toInt();
+        if (count > maxCount) maxCount = count;
+    }
+
+    for (const auto& item : trend) {
+        const QVariantMap map = item.toMap();
+        const QString date = map.value(QStringLiteral("date")).toString();
+        const int count = map.value(QStringLiteral("count")).toInt();
+        addBarRow(container, layout, date, count, maxCount, barColor, true, 80);
+    }
+}
+
 } // namespace
+
+class StatsPage::Impl {
+public:
+    QWidget* cardsContainer = nullptr;
+    QWidget* authorsContainer = nullptr;
+    QWidget* categoriesContainer = nullptr;
+    QWidget* timeOfDayContainer = nullptr;
+    QWidget* dailyTrendContainer = nullptr;
+    QWidget* monthlyTrendContainer = nullptr;
+    QWidget* yearlyTrendContainer = nullptr;
+    QLabel* emptyLabel = nullptr;
+};
 
 StatsPage::StatsPage(QWidget* parent)
     : QWidget(parent)
+    , d(std::make_unique<Impl>())
 {
     buildUi();
 }
+
+StatsPage::~StatsPage() = default;
 
 void StatsPage::buildUi()
 {
@@ -95,33 +176,41 @@ void StatsPage::buildUi()
     contentLayout->setContentsMargins(20, 20, 20, 20);
     contentLayout->setSpacing(0);
 
-    m_emptyLabel = new QLabel(QStringLiteral("暂无数据，请先抓取历史记录。"), content);
-    m_emptyLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 13px; padding: 40px;").arg(theme::TEXT_3));
-    m_emptyLabel->setAlignment(Qt::AlignCenter);
-    contentLayout->addWidget(m_emptyLabel);
+    d->emptyLabel = new QLabel(QStringLiteral("暂无数据，请先抓取历史记录。"), content);
+    d->emptyLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 13px; padding: 40px;").arg(theme::TEXT_3));
+    d->emptyLabel->setAlignment(Qt::AlignCenter);
+    contentLayout->addWidget(d->emptyLabel);
 
-    m_cardsContainer = new QWidget(content);
-    auto* cardsLayout = new QGridLayout(m_cardsContainer);
+    d->cardsContainer = new QWidget(content);
+    auto* cardsLayout = new QGridLayout(d->cardsContainer);
     cardsLayout->setContentsMargins(0, 0, 0, 0);
     cardsLayout->setSpacing(12);
-    m_cardsContainer->hide();
-    contentLayout->addWidget(m_cardsContainer);
+    d->cardsContainer->hide();
+    contentLayout->addWidget(d->cardsContainer);
 
-    m_authorsContainer = createSection(content, QStringLiteral("最多观看 UP 主"));
-    m_authorsContainer->hide();
-    contentLayout->addWidget(m_authorsContainer->parentWidget());
+    d->authorsContainer = createSection(content, QStringLiteral("最多观看 UP 主"));
+    d->authorsContainer->hide();
+    contentLayout->addWidget(d->authorsContainer->parentWidget());
 
-    m_categoriesContainer = createSection(content, QStringLiteral("最常看分类"));
-    m_categoriesContainer->hide();
-    contentLayout->addWidget(m_categoriesContainer->parentWidget());
+    d->categoriesContainer = createSection(content, QStringLiteral("最常看分类"));
+    d->categoriesContainer->hide();
+    contentLayout->addWidget(d->categoriesContainer->parentWidget());
 
-    m_timeOfDayContainer = createSection(content, QStringLiteral("观看时段分布"));
-    m_timeOfDayContainer->hide();
-    contentLayout->addWidget(m_timeOfDayContainer->parentWidget());
+    d->timeOfDayContainer = createSection(content, QStringLiteral("观看时段分布"));
+    d->timeOfDayContainer->hide();
+    contentLayout->addWidget(d->timeOfDayContainer->parentWidget());
 
-    m_trendContainer = createSection(content, QStringLiteral("近 30 天观看趋势"));
-    m_trendContainer->hide();
-    contentLayout->addWidget(m_trendContainer->parentWidget());
+    d->dailyTrendContainer = createSection(content, QStringLiteral("近 30 天观看趋势"));
+    d->dailyTrendContainer->hide();
+    contentLayout->addWidget(d->dailyTrendContainer->parentWidget());
+
+    d->monthlyTrendContainer = createSection(content, QStringLiteral("近 12 个月观看趋势"));
+    d->monthlyTrendContainer->hide();
+    contentLayout->addWidget(d->monthlyTrendContainer->parentWidget());
+
+    d->yearlyTrendContainer = createSection(content, QStringLiteral("年度观看趋势"));
+    d->yearlyTrendContainer->hide();
+    contentLayout->addWidget(d->yearlyTrendContainer->parentWidget());
 
     contentLayout->addStretch();
     scroll->setWidget(content);
@@ -131,28 +220,32 @@ void StatsPage::buildUi()
 void StatsPage::setRecords(const RecordList& records)
 {
     const bool hasData = !records.empty();
-    m_emptyLabel->setVisible(!hasData);
-    m_cardsContainer->setVisible(hasData);
-    m_authorsContainer->parentWidget()->setVisible(hasData);
-    m_categoriesContainer->parentWidget()->setVisible(hasData);
-    m_timeOfDayContainer->parentWidget()->setVisible(hasData);
-    m_trendContainer->parentWidget()->setVisible(hasData);
+    d->emptyLabel->setVisible(!hasData);
+    d->cardsContainer->setVisible(hasData);
+    d->authorsContainer->parentWidget()->setVisible(hasData);
+    d->categoriesContainer->parentWidget()->setVisible(hasData);
+    d->timeOfDayContainer->parentWidget()->setVisible(hasData);
+    d->dailyTrendContainer->parentWidget()->setVisible(hasData);
+    d->monthlyTrendContainer->parentWidget()->setVisible(hasData);
+    d->yearlyTrendContainer->parentWidget()->setVisible(hasData);
 
     if (!hasData) {
         return;
     }
 
     updateCards(bili::business::computeBasicStats(records));
-    updateList(m_authorsContainer, bili::business::topAuthors(records), QStringLiteral("author"));
-    updateList(m_categoriesContainer, bili::business::topCategories(records), QStringLiteral("category"));
+    updateList(d->authorsContainer, bili::business::topAuthors(records), QStringLiteral("author"));
+    updateList(d->categoriesContainer, bili::business::topCategories(records), QStringLiteral("category"));
     updateTimeOfDay(bili::business::timeOfDayDistribution(records));
     updateDailyTrend(bili::business::dailyTrend(records));
+    updateMonthlyTrend(bili::business::monthlyTrend(records));
+    updateYearlyTrend(bili::business::yearlyTrend(records));
 }
 
 void StatsPage::updateCards(const QVariantMap& stats)
 {
-    clearLayout(m_cardsContainer->layout());
-    auto* grid = qobject_cast<QGridLayout*>(m_cardsContainer->layout());
+    clearLayout(d->cardsContainer->layout());
+    auto* grid = qobject_cast<QGridLayout*>(d->cardsContainer->layout());
 
     const QVector<QPair<QString, QString>> cards = {
         { stats.value(QStringLiteral("total_records")).toString(), QStringLiteral("总记录") },
@@ -166,12 +259,12 @@ void StatsPage::updateCards(const QVariantMap& stats)
 
     constexpr int columns = 4;
     for (int i = 0; i < cards.size(); ++i) {
-        auto* valueLabel = createCardValue(m_cardsContainer, cards[i].first, cards[i].second);
+        auto* valueLabel = createCardValue(d->cardsContainer, cards[i].first, cards[i].second);
         grid->addWidget(valueLabel->parentWidget(), i / columns, i % columns);
     }
 }
 
-void StatsPage::updateList(QWidget* container, const QVariantList& list, const QString& labelKey)
+void StatsPage::updateList(QWidget* container, const QVariantList& list, const QString& /*labelKey*/)
 {
     auto* layout = container->layout();
     clearLayout(layout);
@@ -195,40 +288,18 @@ void StatsPage::updateList(QWidget* container, const QVariantList& list, const Q
         const int count = map.value(QStringLiteral("count")).toInt();
         const QString watchText = map.value(QStringLiteral("watch_time_text")).toString();
         const QString completionText = map.value(QStringLiteral("avg_completion_text")).toString();
-
-        auto* row = new QWidget(container);
-        auto* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(8);
-
-        auto* nameLabel = new QLabel(QStringLiteral("%1 (%2 次, %3, 完成度 %4)")
-                                         .arg(name)
-                                         .arg(count)
-                                         .arg(watchText)
-                                         .arg(completionText),
-                                     row);
-        nameLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; border: none; background: transparent;").arg(theme::TEXT));
-        nameLabel->setWordWrap(true);
-        rowLayout->addWidget(nameLabel, 1);
-
-        auto* bar = new QProgressBar(row);
-        bar->setRange(0, maxCount);
-        bar->setValue(count);
-        bar->setTextVisible(false);
-        bar->setFixedHeight(6);
-        bar->setStyleSheet(QStringLiteral(
-            "QProgressBar { border: none; background-color: %1; border-radius: 3px; }"
-            "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
-        ).arg(theme::SURFACE_HOVER, theme::PINK));
-        rowLayout->addWidget(bar);
-
-        layout->addWidget(row);
+        const QString label = QStringLiteral("%1 (%2 次, %3, 完成度 %4)")
+                                  .arg(name)
+                                  .arg(count)
+                                  .arg(watchText)
+                                  .arg(completionText);
+        addBarRow(container, layout, label, count, maxCount, theme::PINK);
     }
 }
 
 void StatsPage::updateTimeOfDay(const QVariantMap& distribution)
 {
-    auto* layout = m_timeOfDayContainer->layout();
+    auto* layout = d->timeOfDayContainer->layout();
     clearLayout(layout);
 
     int total = 0;
@@ -246,71 +317,23 @@ void StatsPage::updateTimeOfDay(const QVariantMap& distribution)
 
     for (const QString& key : order) {
         const int count = distribution.value(key).toInt();
-
-        auto* row = new QWidget(m_timeOfDayContainer);
-        auto* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(8);
-
-        auto* nameLabel = new QLabel(QStringLiteral("%1 (%2)").arg(key).arg(count), row);
-        nameLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; border: none; background: transparent;").arg(theme::TEXT));
-        rowLayout->addWidget(nameLabel, 1);
-
-        auto* bar = new QProgressBar(row);
-        bar->setRange(0, total);
-        bar->setValue(count);
-        bar->setTextVisible(false);
-        bar->setFixedHeight(6);
-        bar->setStyleSheet(QStringLiteral(
-            "QProgressBar { border: none; background-color: %1; border-radius: 3px; }"
-            "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
-        ).arg(theme::SURFACE_HOVER, theme::BLUE));
-        rowLayout->addWidget(bar);
-
-        layout->addWidget(row);
+        addBarRow(d->timeOfDayContainer, layout, QStringLiteral("%1 (%2)").arg(key).arg(count), count, total, theme::BLUE);
     }
 }
 
 void StatsPage::updateDailyTrend(const QVariantList& trend)
 {
-    auto* layout = m_trendContainer->layout();
-    clearLayout(layout);
+    updateTrendBars(d->dailyTrendContainer, trend, theme::PINK);
+}
 
-    int maxCount = 1;
-    for (const auto& item : trend) {
-        const int count = item.toMap().value(QStringLiteral("count")).toInt();
-        if (count > maxCount) maxCount = count;
-    }
+void StatsPage::updateMonthlyTrend(const QVariantList& trend)
+{
+    updateTrendBars(d->monthlyTrendContainer, trend, theme::BLUE);
+}
 
-    for (const auto& item : trend) {
-        const QVariantMap map = item.toMap();
-        const QString date = map.value(QStringLiteral("date")).toString();
-        const int count = map.value(QStringLiteral("count")).toInt();
-
-        auto* row = new QWidget(m_trendContainer);
-        auto* rowLayout = new QHBoxLayout(row);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(8);
-
-        auto* dateLabel = new QLabel(date, row);
-        dateLabel->setStyleSheet(QStringLiteral("color: %1; font-size: 11px; border: none; background: transparent;").arg(theme::TEXT_3));
-        dateLabel->setFixedWidth(80);
-        rowLayout->addWidget(dateLabel);
-
-        auto* bar = new QProgressBar(row);
-        bar->setRange(0, maxCount);
-        bar->setValue(count);
-        bar->setFormat(QStringLiteral("%v"));
-        bar->setAlignment(Qt::AlignCenter);
-        bar->setFixedHeight(14);
-        bar->setStyleSheet(QStringLiteral(
-            "QProgressBar { border: none; background-color: %1; border-radius: 7px; color: %2; font-size: 10px; }"
-            "QProgressBar::chunk { background-color: %3; border-radius: 7px; }"
-        ).arg(theme::SURFACE_HOVER, theme::TEXT, theme::PINK));
-        rowLayout->addWidget(bar, 1);
-
-        layout->addWidget(row);
-    }
+void StatsPage::updateYearlyTrend(const QVariantList& trend)
+{
+    updateTrendBars(d->yearlyTrendContainer, trend, theme::SUCCESS);
 }
 
 } // namespace bili::gui

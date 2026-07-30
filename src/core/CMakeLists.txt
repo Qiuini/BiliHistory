@@ -12,6 +12,9 @@ target_link_libraries(BiliHistoryCore
     PUBLIC
         Qt6::Core
         Qt6::Network
+        # SecretsStore 已迁移至 licensing 层，但 core/config.cpp 的 cookie 存取
+        # 仍使用 SecretsStore，故 core 仍需链接 BiliHistoryLicensing；
+        # tests/licensing/test_secrets_store.cpp 亦经此 PUBLIC 传递获取头文件路径。
         BiliHistoryLicensing
 )
 

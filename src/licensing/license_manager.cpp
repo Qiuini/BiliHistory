@@ -33,16 +33,19 @@ QString LicenseInfo::expiryText() const
         .toString(QStringLiteral("yyyy-MM-dd hh:mm"));
 }
 
-namespace {
+LicenseManager::LicenseManager() = default;
 
-QByteArray g_testPublicKeyPem;
-
-} // namespace
-
-QByteArray LicenseManager::publicKeyPem()
+LicenseManager::LicenseManager(QByteArray publicKeyPem,
+                               std::function<QString()> machineIdProvider)
+    : m_publicKeyPem(std::move(publicKeyPem))
+    , m_machineIdProvider(std::move(machineIdProvider))
 {
-    if (!g_testPublicKeyPem.isEmpty()) {
-        return g_testPublicKeyPem;
+}
+
+QByteArray LicenseManager::resolvePublicKey() const
+{
+    if (!m_publicKeyPem.isEmpty()) {
+        return m_publicKeyPem;
     }
 
     const QByteArray pem(keys::PublicKeyPem);
@@ -53,26 +56,22 @@ QByteArray LicenseManager::publicKeyPem()
     return pem;
 }
 
-void LicenseManager::setPublicKeyForTest(const QByteArray& pem)
-{
-    g_testPublicKeyPem = pem;
-}
-
-bool LicenseManager::matchesMachine(const LicenseInfo& info)
+bool LicenseManager::matchesMachine(const LicenseInfo& info) const
 {
     if (info.mid.isEmpty()) {
         return true;
     }
-    return info.mid == MachineId::current();
+    const QString currentMid = m_machineIdProvider ? m_machineIdProvider() : MachineId::current();
+    return info.mid == currentMid;
 }
 
-std::optional<LicenseInfo> LicenseManager::verifyCode(const QString& code)
+std::optional<LicenseInfo> LicenseManager::verifyCode(const QString& code) const
 {
     if (code.isEmpty() || !code.contains('.')) {
         return std::nullopt;
     }
 
-    const QByteArray pem = publicKeyPem();
+    const QByteArray pem = resolvePublicKey();
     if (pem.isEmpty()) {
         return std::nullopt;
     }
@@ -155,7 +154,7 @@ std::optional<LicenseInfo> LicenseManager::verifyCode(const QString& code)
     return info;
 }
 
-std::optional<LicenseInfo> LicenseManager::activate(const QString& code, const QString& licenseFilePath)
+std::optional<LicenseInfo> LicenseManager::activate(const QString& code, const QString& licenseFilePath) const
 {
     auto info = verifyCode(code);
     if (!info) {
@@ -179,7 +178,7 @@ std::optional<LicenseInfo> LicenseManager::activate(const QString& code, const Q
     return info;
 }
 
-std::optional<LicenseInfo> LicenseManager::currentLicense(const QString& licenseFilePath)
+std::optional<LicenseInfo> LicenseManager::currentLicense(const QString& licenseFilePath) const
 {
     QFile file(licenseFilePath);
     if (!file.exists()) {
@@ -204,7 +203,7 @@ std::optional<LicenseInfo> LicenseManager::currentLicense(const QString& license
     return info;
 }
 
-bool LicenseManager::isLicensed(const QString& licenseFilePath)
+bool LicenseManager::isLicensed(const QString& licenseFilePath) const
 {
     return currentLicense(licenseFilePath).has_value();
 }

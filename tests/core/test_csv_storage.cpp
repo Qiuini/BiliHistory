@@ -80,3 +80,30 @@ TEST(CsvStorage, SkipMalformedRows) {
     EXPECT_EQ(result.records.size(), 1u);
     EXPECT_EQ(result.errorCount, 1);
 }
+
+// 新增：列顺序变化或新增列也能正确解析（按表头列名索引）
+TEST(CsvStorage, ReorderedColumnsParsedByHeaderName) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+
+    const QString path = dir.filePath("history.csv");
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    // 故意把列顺序打乱，并新增一列 extra_col
+    file.write("title,id,type,category,author_name,author_id,view_at,progress,progress_percent,bvid,cover_url,bv_id,cid,duration,room_id,live_id,live_status,cv_id,category_id,raw_json,schema_version,extra_col\n");
+    file.write("视频标题,1,video,动画,UP主,0,2024-01-01T00:00:00,100%,100,BV1xx,cover.jpg,BV1xx,0,120,,0,,,0,,1,ignored\n");
+    file.close();
+
+    const auto result = CsvStorage::load(path);
+    EXPECT_EQ(result.records.size(), 1u);
+    EXPECT_EQ(result.errorCount, 0);
+    ASSERT_FALSE(result.records.empty());
+
+    auto video = std::dynamic_pointer_cast<VideoRecord>(result.records[0]);
+    ASSERT_NE(video, nullptr);
+    EXPECT_EQ(video->title, QStringLiteral("视频标题"));
+    EXPECT_EQ(video->bvId, QStringLiteral("BV1xx"));
+    EXPECT_EQ(video->duration, 120);
+    EXPECT_EQ(video->category, QStringLiteral("动画"));
+    EXPECT_EQ(result.schemaVersion, 1);
+}

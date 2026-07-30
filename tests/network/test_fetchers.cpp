@@ -7,6 +7,7 @@
 #include "api_client.h"
 #include "config.h"
 #include "fetchers.h"
+#include "http_client.h"
 #include "test_http_server.h"
 
 using namespace bili;
@@ -16,27 +17,33 @@ namespace {
 class FetchersTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        Config::instance().loadDefaults();
-        Config::instance().setValue(QStringLiteral("retry_wait_ms"), 50);
-        Config::instance().setValue(QStringLiteral("http_backoff_factor"), 0.5);
-        Config::instance().setValue(QStringLiteral("http_total_retries"), 1);
-        Config::instance().setValue(QStringLiteral("page_size"), 5);
+        m_config = std::make_unique<Config>();
+        m_config->loadDefaults();
+        m_config->setValue(QStringLiteral("retry_wait_ms"), 50);
+        m_config->setValue(QStringLiteral("http_backoff_factor"), 0.5);
+        m_config->setValue(QStringLiteral("http_total_retries"), 1);
+        m_config->setValue(QStringLiteral("page_size"), 5);
 
         m_server = std::make_unique<TestHttpServer>();
         ASSERT_TRUE(m_server->start());
 
         const QString base = QStringLiteral("http://127.0.0.1:%1").arg(m_server->serverPort());
-        Config::instance().setValue(QStringLiteral("base_url"), base);
+        m_config->setValue(QStringLiteral("base_url"), base);
 
-        m_api = std::make_unique<ApiClient>();
+        m_http = std::make_unique<HttpClient>(m_config.get());
+        m_api = std::make_unique<ApiClient>(m_config.get(), m_http.get());
     }
 
     void TearDown() override {
         m_api.reset();
+        m_http.reset();
         m_server.reset();
+        m_config.reset();
     }
 
+    std::unique_ptr<Config> m_config;
     std::unique_ptr<TestHttpServer> m_server;
+    std::unique_ptr<HttpClient> m_http;
     std::unique_ptr<ApiClient> m_api;
 };
 
@@ -79,7 +86,7 @@ TEST_F(FetchersTest, HistoryFetcherPagination) {
     m_server->enqueueResponse(200, page1);
     m_server->enqueueResponse(200, page2);
 
-    HistoryFetcher fetcher(m_api.get());
+    HistoryFetcher fetcher(m_api.get(), m_config.get());
 
     bool finished = false;
     int pageCount = 0;
@@ -130,7 +137,7 @@ TEST_F(FetchersTest, FollowingFetcherPagination) {
     m_server->enqueueResponse(200, page1);
     m_server->enqueueResponse(200, page2);
 
-    FollowingFetcher fetcher(m_api.get());
+    FollowingFetcher fetcher(m_api.get(), m_config.get());
 
     bool finished = false;
     FollowingList allUsers;
@@ -157,7 +164,7 @@ TEST_F(FetchersTest, FollowingFetcherPagination) {
 TEST_F(FetchersTest, HistoryFetcherCancel) {
     m_server->enqueueResponse(200, QByteArrayLiteral("{}"), 5000);
 
-    HistoryFetcher fetcher(m_api.get());
+    HistoryFetcher fetcher(m_api.get(), m_config.get());
 
     bool cancelled = false;
 

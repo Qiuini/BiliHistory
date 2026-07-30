@@ -1,31 +1,39 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QStackedWidget>
+#include <memory>
 
 #include "core/models.h"
-#include "favorites_page.h"
-#include "following_page.h"
-#include "history_table_model.h"
 
 class QLabel;
-class QLineEdit;
-class QProgressBar;
-class QTableView;
-class QTimer;
+
+namespace bili {
+class IApiClient;
+class IConfig;
+class IFeatureAccess;
+class ILicenseManager;
+} // namespace bili
 
 namespace bili::business {
-class FetchWorker;
+class IFetchWorker;
+}
+
+namespace bili {
+class IFavoritesFetcher;
 }
 
 namespace bili::gui {
 
-class StatsPage;
-
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(bili::IConfig* config,
+                        bili::business::IFetchWorker* fetchWorker,
+                        bili::IFavoritesFetcher* favoritesFetcher,
+                        bili::IApiClient* apiClient,
+                        bili::IFeatureAccess* featureAccess,
+                        bili::ILicenseManager* licenseManager = nullptr,
+                        QWidget* parent = nullptr);
     ~MainWindow() override;
 
     void setHistoryRecords(const RecordList& records);
@@ -37,6 +45,7 @@ private slots:
     void onSettings();
     void onActivate();
     void onExport();
+    void onAdvancedExport();
     void onStats();
     void onSearchTextChanged();
     void onPageChanged(int index);
@@ -50,34 +59,18 @@ private slots:
 
 private:
     void buildMenu();
+    void buildBanner();
     void buildSidebar();
     void buildPages();
-    void buildBanner();
-    void updateStatusBar();
+
     void applySearchFilter();
+    void setFetchActive(bool active);
+    void updateStatusBar();
     void showBanner(const QString& message, bool error = false);
     void hideBanner();
 
-    QWidget* m_sidebar = nullptr;
-    QStackedWidget* m_stack = nullptr;
-    QTableView* m_historyTable = nullptr;
-    HistoryTableModel* m_historyModel = nullptr;
-    FollowingPage* m_followingPage = nullptr;
-    FavoritesPage* m_favoritesPage = nullptr;
-    StatsPage* m_statsPage = nullptr;
-    QWidget* m_historyPage = nullptr;
-
-    QLineEdit* m_searchEdit = nullptr;
-    QProgressBar* m_progressBar = nullptr;
-    QLabel* m_statusLabel = nullptr;
-    QWidget* m_banner = nullptr;
-    QLabel* m_bannerLabel = nullptr;
-    QTimer* m_searchDebounce = nullptr;
-
-    RecordList m_allRecords;
-    RecordList m_filteredRecords;
-    bili::business::FetchWorker* m_fetchWorker = nullptr;
-    bool m_fetching = false;
+    class Impl;
+    std::unique_ptr<Impl> d;
 };
 
 } // namespace bili::gui

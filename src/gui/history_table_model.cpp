@@ -31,14 +31,24 @@ bool recordDataChanged(const RecordPtr& oldRec, const RecordPtr& newRec)
 
 } // namespace
 
+class HistoryTableModel::Impl {
+public:
+    RecordList rows;
+    QSet<QString> newIds;
+    int hoverRow = -1;
+};
+
 HistoryTableModel::HistoryTableModel(QObject* parent)
     : QAbstractTableModel(parent)
+    , d(std::make_unique<Impl>())
 {
 }
 
+HistoryTableModel::~HistoryTableModel() = default;
+
 int HistoryTableModel::rowCount(const QModelIndex& /*parent*/) const
 {
-    return static_cast<int>(m_rows.size());
+    return static_cast<int>(d->rows.size());
 }
 
 int HistoryTableModel::columnCount(const QModelIndex& /*parent*/) const
@@ -51,7 +61,7 @@ QVariant HistoryTableModel::data(const QModelIndex& index, int role) const
     if (!index.isValid()) return {};
     const int row = index.row();
     if (row < 0 || row >= rowCount()) return {};
-    const auto& rec = m_rows[row];
+    const auto& rec = d->rows[row];
 
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
@@ -76,8 +86,8 @@ QVariant HistoryTableModel::data(const QModelIndex& index, int role) const
     case ProgressRole:    return rec->progressPercent;
     case ProgressTextRole:return rec->progress;
     case LinkRole:        return rec->uniqueKey();
-    case NewRole:         return m_newIds.contains(rec->uniqueKey());
-    case HoverRole:       return row == m_hoverRow;
+    case NewRole:         return d->newIds.contains(rec->uniqueKey());
+    case HoverRole:       return row == d->hoverRow;
     default:              return {};
     }
 }
@@ -105,7 +115,7 @@ QVariant HistoryTableModel::headerData(int section, Qt::Orientation orientation,
 void HistoryTableModel::setRows(const RecordList& records)
 {
     beginResetModel();
-    m_rows = records;
+    d->rows = records;
     endResetModel();
 }
 
@@ -119,9 +129,9 @@ void HistoryTableModel::updateRows(const RecordList& records)
 
     // Remove rows that no longer exist.
     for (int i = rowCount() - 1; i >= 0; --i) {
-        if (!newKeys.contains(m_rows[i]->uniqueKey())) {
+        if (!newKeys.contains(d->rows[i]->uniqueKey())) {
             beginRemoveRows(QModelIndex(), i, i);
-            m_rows.erase(m_rows.begin() + i);
+            d->rows.erase(d->rows.begin() + i);
             endRemoveRows();
         }
     }
@@ -130,7 +140,7 @@ void HistoryTableModel::updateRows(const RecordList& records)
     QHash<QString, int> indexMap;
     indexMap.reserve(rowCount());
     for (int i = 0; i < rowCount(); ++i) {
-        indexMap[m_rows[i]->uniqueKey()] = i;
+        indexMap[d->rows[i]->uniqueKey()] = i;
     }
 
     // Reorder / insert to match the new record list.
@@ -139,7 +149,7 @@ void HistoryTableModel::updateRows(const RecordList& records)
         auto it = indexMap.find(key);
         if (it == indexMap.end()) {
             beginInsertRows(QModelIndex(), i, i);
-            m_rows.insert(m_rows.begin() + i, records[i]);
+            d->rows.insert(d->rows.begin() + i, records[i]);
             endInsertRows();
             for (auto& idx : indexMap) {
                 if (idx >= i) ++idx;
@@ -149,14 +159,14 @@ void HistoryTableModel::updateRows(const RecordList& records)
             const int oldIdx = it.value();
             if (oldIdx != i) {
                 beginRemoveRows(QModelIndex(), oldIdx, oldIdx);
-                RecordPtr moved = m_rows[oldIdx];
-                m_rows.erase(m_rows.begin() + oldIdx);
+                RecordPtr moved = d->rows[oldIdx];
+                d->rows.erase(d->rows.begin() + oldIdx);
                 endRemoveRows();
                 for (auto& idx : indexMap) {
                     if (idx > oldIdx) --idx;
                 }
                 beginInsertRows(QModelIndex(), i, i);
-                m_rows.insert(m_rows.begin() + i, moved);
+                d->rows.insert(d->rows.begin() + i, moved);
                 endInsertRows();
                 for (auto& idx : indexMap) {
                     if (idx >= i) ++idx;
@@ -170,10 +180,10 @@ void HistoryTableModel::updateRows(const RecordList& records)
     int firstChanged = -1;
     int lastChanged = -1;
     for (int i = 0; i < static_cast<int>(records.size()); ++i) {
-        if (recordDataChanged(m_rows[i], records[i])) {
+        if (recordDataChanged(d->rows[i], records[i])) {
             if (firstChanged == -1) firstChanged = i;
             lastChanged = i;
-            m_rows[i] = records[i];
+            d->rows[i] = records[i];
         }
     }
     if (firstChanged != -1) {
@@ -184,7 +194,7 @@ void HistoryTableModel::updateRows(const RecordList& records)
 
 void HistoryTableModel::setNewIds(const QSet<QString>& ids)
 {
-    m_newIds = ids;
+    d->newIds = ids;
     if (rowCount() > 0) {
         emit dataChanged(index(0, 0),
                          index(rowCount() - 1, columnCount() - 1),
@@ -194,17 +204,17 @@ void HistoryTableModel::setNewIds(const QSet<QString>& ids)
 
 void HistoryTableModel::setHoverRow(int row)
 {
-    if (m_hoverRow == row) return;
-    const int oldRow = m_hoverRow;
-    m_hoverRow = row;
+    if (d->hoverRow == row) return;
+    const int oldRow = d->hoverRow;
+    d->hoverRow = row;
     if (oldRow >= 0 && oldRow < rowCount()) {
         emit dataChanged(index(oldRow, 0),
                          index(oldRow, columnCount() - 1),
                          { HoverRole });
     }
-    if (m_hoverRow >= 0 && m_hoverRow < rowCount()) {
-        emit dataChanged(index(m_hoverRow, 0),
-                         index(m_hoverRow, columnCount() - 1),
+    if (d->hoverRow >= 0 && d->hoverRow < rowCount()) {
+        emit dataChanged(index(d->hoverRow, 0),
+                         index(d->hoverRow, columnCount() - 1),
                          { HoverRole });
     }
 }

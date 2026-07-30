@@ -1,58 +1,58 @@
 #pragma once
 
-#include "http_client.h"
+#include "core/i_config.h"
+#include "i_api_client.h"
+#include "i_http_client.h"
 
 #include <QJsonObject>
 #include <QObject>
 
 namespace bili {
 
-class ApiRequest : public QObject {
+class ApiClient : public QObject, public IApiClient {
     Q_OBJECT
 public:
-    explicit ApiRequest(QObject* parent = nullptr);
-    void cancel();
-
-signals:
-    void finished(const QJsonObject& data);
-    void error(const bili::NetworkException& error);
-    void cancelled();
-
-private:
-    NetworkReply* m_reply = nullptr;
-    friend class ApiClient;
-};
-
-class ApiClient : public QObject {
-    Q_OBJECT
-public:
-    explicit ApiClient(QObject* parent = nullptr);
+    // 注入式构造：外部传入 IHttpClient（推荐，便于测试注入 Mock）。
+    // 所有权由外部管理（典型做法：将 http 的 parent 设为本 ApiClient）。
+    explicit ApiClient(IConfig* config, IHttpClient* http, QObject* parent = nullptr);
     ~ApiClient() override;
 
-    ApiRequest* getHistoryPage(qint64 maxOid,
-                               qint64 viewAt,
-                               const QString& business,
-                               const QString& cookie);
+    coro::Task<QJsonObject> getHistoryPage(qint64 maxOid,
+                                           qint64 viewAt,
+                                           const QString& business,
+                                           const QString& cookie,
+                                           coro::CancellationToken::Ptr token = nullptr) override;
 
-    ApiRequest* getFollowingPage(int pn,
-                                 int ps,
-                                 const QString& vmid,
-                                 const QString& cookie);
+    coro::Task<QJsonObject> getFollowingPage(int pn,
+                                             int ps,
+                                             const QString& vmid,
+                                             const QString& cookie,
+                                             coro::CancellationToken::Ptr token = nullptr) override;
 
-    ApiRequest* getFavoriteFolders(const QString& cookie);
+    coro::Task<QJsonObject> getFavoriteFolders(const QString& cookie,
+                                               coro::CancellationToken::Ptr token = nullptr) override;
 
-    ApiRequest* getFavoriteResources(const QString& folderId,
-                                     int pn,
-                                     int ps,
-                                     const QString& cookie);
+    coro::Task<QJsonObject> getFavoriteResources(const QString& folderId,
+                                                 int pn,
+                                                 int ps,
+                                                 const QString& cookie,
+                                                 coro::CancellationToken::Ptr token = nullptr) override;
 
-    ApiRequest* getUserCard(const QString& mid, const QString& cookie);
+    coro::Task<QJsonObject> getNav(const QString& cookie,
+                                   coro::CancellationToken::Ptr token = nullptr) override;
+
+    coro::Task<QJsonObject> getUserCard(const QString& mid,
+                                        const QString& cookie,
+                                        coro::CancellationToken::Ptr token = nullptr) override;
 
 private:
-    ApiRequest* sendRequest(const QUrl& url, const QString& cookie);
-    void parseSuccess(const NetworkResponse& response, ApiRequest* request);
+    coro::Task<QJsonObject> sendRequest(const QUrl& url,
+                                        const QString& cookie,
+                                        coro::CancellationToken::Ptr token);
+    QJsonObject parseResponse(const NetworkResponse& response);
 
-    HttpClient* m_http = nullptr;
+    IConfig* m_config = nullptr;
+    IHttpClient* m_http = nullptr;
 };
 
 } // namespace bili

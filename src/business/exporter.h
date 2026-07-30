@@ -19,9 +19,11 @@ private:
 };
 
 QString exportCsv(const RecordList& records, const QString& filePath);
+QString exportXlsx(const RecordList& records, const QString& filePath);
 QString exportJson(const RecordList& records, const QString& filePath);
 QString exportHtml(const RecordList& records, const QString& filePath);
 QString exportMarkdown(const RecordList& records, const QString& filePath);
+QString exportPdf(const RecordList& records, const QString& filePath);
 QString exportRecords(const RecordList& records, const QString& filePath);
 QString supportedFilters();
 

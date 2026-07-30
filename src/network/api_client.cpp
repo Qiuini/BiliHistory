@@ -1,6 +1,5 @@
 #include "api_client.h"
 
-#include "config.h"
 #include "exceptions.h"
 #include "logger.h"
 
@@ -10,46 +9,40 @@
 
 namespace bili {
 
-ApiRequest::ApiRequest(QObject* parent)
+ApiClient::ApiClient(IConfig* config, IHttpClient* http, QObject* parent)
     : QObject(parent)
+    , m_config(config)
+    , m_http(http)
 {
-}
-
-void ApiRequest::cancel() {
-    if (m_reply) {
-        m_reply->cancel();
-    }
-}
-
-ApiClient::ApiClient(QObject* parent)
-    : QObject(parent)
-    , m_http(new HttpClient(this))
-{
+    Q_ASSERT(m_config != nullptr);
+    Q_ASSERT(m_http != nullptr);
 }
 
 ApiClient::~ApiClient() = default;
 
-ApiRequest* ApiClient::getHistoryPage(qint64 maxOid,
-                                      qint64 viewAt,
-                                      const QString& business,
-                                      const QString& cookie)
+coro::Task<QJsonObject> ApiClient::getHistoryPage(qint64 maxOid,
+                                                  qint64 viewAt,
+                                                  const QString& business,
+                                                  const QString& cookie,
+                                                  coro::CancellationToken::Ptr token)
 {
-    QUrl url = Config::instance().apiUrl(QStringLiteral("history"));
+    QUrl url = m_config->apiUrl(QStringLiteral("history"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("max"), QString::number(maxOid));
     query.addQueryItem(QStringLiteral("view_at"), QString::number(viewAt));
     query.addQueryItem(QStringLiteral("business"), business);
-    query.addQueryItem(QStringLiteral("ps"), QString::number(qMin(Config::instance().pageSize(), 30)));
+    query.addQueryItem(QStringLiteral("ps"), QString::number(qMin(m_config->pageSize(), 30)));
     url.setQuery(query);
-    return sendRequest(url, cookie);
+    co_return co_await sendRequest(url, cookie, token);
 }
 
-ApiRequest* ApiClient::getFollowingPage(int pn,
-                                        int ps,
-                                        const QString& vmid,
-                                        const QString& cookie)
+coro::Task<QJsonObject> ApiClient::getFollowingPage(int pn,
+                                                    int ps,
+                                                    const QString& vmid,
+                                                    const QString& cookie,
+                                                    coro::CancellationToken::Ptr token)
 {
-    QUrl url = Config::instance().apiUrl(QStringLiteral("following"));
+    QUrl url = m_config->apiUrl(QStringLiteral("following"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("vmid"), vmid);
     query.addQueryItem(QStringLiteral("pn"), QString::number(pn));
@@ -57,81 +50,75 @@ ApiRequest* ApiClient::getFollowingPage(int pn,
     query.addQueryItem(QStringLiteral("order"), QStringLiteral("desc"));
     query.addQueryItem(QStringLiteral("order_type"), QStringLiteral("attention"));
     url.setQuery(query);
-    return sendRequest(url, cookie);
+    co_return co_await sendRequest(url, cookie, token);
 }
 
-ApiRequest* ApiClient::getFavoriteFolders(const QString& cookie)
+coro::Task<QJsonObject> ApiClient::getFavoriteFolders(const QString& cookie,
+                                                      coro::CancellationToken::Ptr token)
 {
-    QUrl url = Config::instance().apiUrl(QStringLiteral("favorites_folders"));
+    QUrl url = m_config->apiUrl(QStringLiteral("favorites_folders"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("up_mid"), QStringLiteral("0"));
     url.setQuery(query);
-    return sendRequest(url, cookie);
+    co_return co_await sendRequest(url, cookie, token);
 }
 
-ApiRequest* ApiClient::getFavoriteResources(const QString& folderId,
-                                            int pn,
-                                            int ps,
-                                            const QString& cookie)
+coro::Task<QJsonObject> ApiClient::getFavoriteResources(const QString& folderId,
+                                                        int pn,
+                                                        int ps,
+                                                        const QString& cookie,
+                                                        coro::CancellationToken::Ptr token)
 {
-    QUrl url = Config::instance().apiUrl(QStringLiteral("favorites_resource"));
+    QUrl url = m_config->apiUrl(QStringLiteral("favorites_resource"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("media_id"), folderId);
     query.addQueryItem(QStringLiteral("pn"), QString::number(pn));
     query.addQueryItem(QStringLiteral("ps"), QString::number(ps));
     query.addQueryItem(QStringLiteral("platform"), QStringLiteral("web"));
     url.setQuery(query);
-    return sendRequest(url, cookie);
+    co_return co_await sendRequest(url, cookie, token);
 }
 
-ApiRequest* ApiClient::getUserCard(const QString& mid, const QString& cookie)
+coro::Task<QJsonObject> ApiClient::getNav(const QString& cookie,
+                                          coro::CancellationToken::Ptr token)
 {
-    QUrl url = Config::instance().apiUrl(QStringLiteral("user_card"));
+    const QUrl url = m_config->apiUrl(QStringLiteral("nav"));
+    co_return co_await sendRequest(url, cookie, token);
+}
+
+coro::Task<QJsonObject> ApiClient::getUserCard(const QString& mid,
+                                               const QString& cookie,
+                                               coro::CancellationToken::Ptr token)
+{
+    QUrl url = m_config->apiUrl(QStringLiteral("user_card"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("mid"), mid);
     query.addQueryItem(QStringLiteral("photo"), QStringLiteral("false"));
     url.setQuery(query);
-    return sendRequest(url, cookie);
+    co_return co_await sendRequest(url, cookie, token);
 }
 
-ApiRequest* ApiClient::sendRequest(const QUrl& url, const QString& cookie)
+coro::Task<QJsonObject> ApiClient::sendRequest(const QUrl& url,
+                                               const QString& cookie,
+                                               coro::CancellationToken::Ptr token)
 {
-    auto request = new ApiRequest(this);
-
     QHash<QString, QString> headers;
     if (!cookie.isEmpty()) {
         headers[QStringLiteral("Cookie")] = cookie;
     }
 
-    NetworkReply* reply = m_http->get(url, headers);
-    request->m_reply = reply;
-
-    connect(reply, &NetworkReply::finished, this, [this, request](const NetworkResponse& response) {
-        parseSuccess(response, request);
-    });
-    connect(reply, &NetworkReply::error, this, [request](const NetworkException& error) {
-        emit request->error(error);
-        request->deleteLater();
-    });
-    connect(reply, &NetworkReply::cancelled, this, [request]() {
-        emit request->cancelled();
-        request->deleteLater();
-    });
-
-    return request;
+    Logger::info(QStringLiteral("[API] %1").arg(url.toString()));
+    const NetworkResponse response = co_await m_http->get(url, headers, token);
+    co_return parseResponse(response);
 }
 
-void ApiClient::parseSuccess(const NetworkResponse& response, ApiRequest* request)
+QJsonObject ApiClient::parseResponse(const NetworkResponse& response)
 {
-    request->m_reply = nullptr;
-
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(response.body, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        emit request->error(NetworkException(QStringLiteral("API 响应 JSON 解析失败: %1")
-                                                 .arg(parseError.errorString())));
-        request->deleteLater();
-        return;
+        throw NetworkException(QStringLiteral("API 响应 JSON 解析失败: %1")
+                                   .arg(parseError.errorString()));
     }
 
     const QJsonObject root = doc.object();
@@ -139,22 +126,17 @@ void ApiClient::parseSuccess(const NetworkResponse& response, ApiRequest* reques
     const QString message = root.value(QStringLiteral("message")).toString();
 
     if (apiCode == -101) {
-        emit request->error(CookieException(QStringLiteral("Cookie 无效或已过期 (-101)")));
-        request->deleteLater();
-        return;
+        throw CookieException(QStringLiteral("Cookie 无效或已过期 (-101)"));
     }
 
     if (apiCode != 0) {
-        emit request->error(ApiException(QStringLiteral("API 返回错误: %1 (code=%2)")
-                                             .arg(message)
-                                             .arg(apiCode),
-                                         apiCode));
-        request->deleteLater();
-        return;
+        throw ApiException(QStringLiteral("API 返回错误: %1 (code=%2)")
+                               .arg(message)
+                               .arg(apiCode),
+                           apiCode);
     }
 
-    emit request->finished(root);
-    request->deleteLater();
+    return root;
 }
 
 } // namespace bili
