@@ -2,6 +2,7 @@
   "name": "bilihistory",
   "version": "2.0.0",
   "description": "B站历史记录管理工具",
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
   "dependencies": [
     {
       "name": "qtbase",
